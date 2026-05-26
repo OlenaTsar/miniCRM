@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'rest_framework',
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",  # logout
+    "django_celery_results",
 ]
 
 MIDDLEWARE = [
@@ -157,5 +158,10 @@ SIMPLE_JWT = {
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 # URL для verification links
-# FRONTEND_URL = "http://127.0.0.1:3000"  # with frontend
-FRONTEND_URL = "http://127.0.0.1:8000"
+FRONTEND_URL = os.getenv("FRONTEND_URL")
+
+
+# Celery
+CELERY_BROKER_URL = "redis://localhost:6379/0"
+CELERY_RESULT_BACKEND = "django-db"  # зберігає результати tasks у БД
+CELERY_TIMEZONE = "Europe/Kyiv"
