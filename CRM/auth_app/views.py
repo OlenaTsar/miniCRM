@@ -6,11 +6,15 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 from django.contrib.auth import get_user_model
-from django.core.mail import send_mail
-from django.conf import settings
+from django.utils import timezone
 
-from .serializers import RegisterSerializer, CustomTokenObtainPairSerializer
-from .tasks import send_verification_email
+from .serializers import (
+    RegisterSerializer,
+    CustomTokenObtainPairSerializer,
+    PasswordResetSerializer,
+    PasswordResetConfirmSerializer,
+)
+from .tasks import send_verification_email, send_password_reset_email
 
 User = get_user_model()
 
@@ -58,3 +62,51 @@ class LogoutView(APIView):
             return Response({"detail": "Успішно вийшли."})
         except TokenError:
             return Response({"detail": "Невалідний токен."}, status=400)
+
+
+class PasswordResetView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = PasswordResetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        email = serializer.validated_data["email"]
+
+        try:
+            user = User.objects.get(email=email)
+            user.generate_password_reset_token()
+            send_password_reset_email.delay(
+                email,
+                str(user.password_reset_token)
+            )
+        except User.DoesNotExist:
+            pass  # не повідомляємо чи існує email — захист від перебору
+
+        return Response({"detail": "If this email exists, you will receive a reset link."})
+
+
+class PasswordResetConfirmView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request, token):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        new_password = serializer.validated_data["new_password"]
+
+        try:
+            user = User.objects.get(password_reset_token=token)
+        except User.DoesNotExist:
+            return Response({"detail": "Невалідний токен."}, status=400)
+
+        if not user.is_password_reset_token_valid():
+            return Response({"detail": "Токен застарів."}, status=400)
+
+        # змінюємо пароль і видаляємо токен
+        user.set_password(new_password)
+        user.password_reset_token = None
+        user.password_reset_token_expires = None
+        user.save()
+
+        return Response({"detail": "Пароль успішно змінено."})
