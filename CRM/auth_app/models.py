@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.contrib.auth.base_user import BaseUserManager
+from django.utils import timezone
 import uuid
 
 
@@ -54,6 +55,10 @@ class User(AbstractBaseUser, PermissionsMixin):
     # токен генерується при реєстрації в serializers
     email_verification_token = models.UUIDField(null=True, blank=True)
 
+    # токен для зміни password
+    password_reset_token = models.UUIDField(null=True, blank=True)
+    password_reset_token_expires = models.DateTimeField(null=True, blank=True)
+
     objects = UserManager()
 
     USERNAME_FIELD = 'email'
@@ -62,3 +67,13 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return self.email
+
+    def generate_password_reset_token(self):
+        self.password_reset_token = uuid.uuid4()
+        self.password_reset_token_expires = timezone.now() + timezone.timedelta(hours=1)
+        self.save()
+
+    def is_password_reset_token_valid(self):
+        if not self.password_reset_token or not self.password_reset_token_expires:
+            return False
+        return timezone.now() < self.password_reset_token_expires
