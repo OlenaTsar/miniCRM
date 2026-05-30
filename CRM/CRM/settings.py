@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'django_extensions',
     'crm_app',
     'auth_app',
+    'users_app',
     'rest_framework',
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",  # logout
