@@ -6,7 +6,6 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 from django.contrib.auth import get_user_model
-from django.utils import timezone
 
 from .serializers import (
     RegisterSerializer,

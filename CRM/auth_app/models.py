@@ -5,9 +5,18 @@ from django.utils import timezone
 import uuid
 
 
+class Team(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=255)
+
+    def __str__(self):
+        return self.name
+
+
 class UserRole(models.TextChoices):
     ADMIN = 'admin', 'Admin'
     MANAGER = 'manager', 'Manager'
+    SALES_REP = 'sales_rep', 'Sales Rep'
     EMPLOYEE = 'employee', 'Employee'
 
 
@@ -44,6 +53,14 @@ class User(AbstractBaseUser, PermissionsMixin):
         max_length=20,
         choices=UserRole.choices,
         default=UserRole.EMPLOYEE
+    )
+    team = models.ForeignKey(
+        Team,
+        on_delete=models.SET_NULL,
+        default=None,
+        null=True,
+        blank=True,
+        related_name='users',
     )
 
     is_active = models.BooleanField(default=True)  # чи активний аккаунт

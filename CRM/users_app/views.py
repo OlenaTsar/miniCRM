@@ -1,9 +1,8 @@
 from rest_framework import mixins, viewsets
 from rest_framework.response import Response
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
 
-from .permissions import IsAdmin
+from .permissions import IsAdmin, IsManager, IsEmployee
 from auth_app.models import User
 from .serializers import UserSerializer, MeUpdateSerializer, MeSerializer
 
@@ -17,12 +16,12 @@ class UserViewSet(
 ):
     queryset = User.objects.all()
     serializer_class = UserSerializer
-    permission_classes = [IsAdmin]
+    permission_classes = [IsManager]
 
     @action(
         detail=False,
-        methods=['get','patch'],
-        permission_classes=[IsAuthenticated]
+        methods=['get', 'patch'],
+        permission_classes=[IsEmployee]
     )
     def me(self, request):
         if request.method == 'GET':
