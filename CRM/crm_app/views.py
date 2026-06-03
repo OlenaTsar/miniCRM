@@ -1,16 +1,33 @@
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.response import Response
 from rest_framework.decorators import action
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import SearchFilter, OrderingFilter
 
 from .permissions import IsSalesRep
 from auth_app.models import UserRole
 from .models import Company, Contact
 from .serializers import CompanySerializer, ContactSerializer
+from .filters import ContactFilter, CompanyFilter
 
 
 class CompanyViewSet(ModelViewSet):
     serializer_class = CompanySerializer
     permission_classes = [IsSalesRep]
+
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_class = CompanyFilter
+    search_fields = [
+        "name",
+        "industry",
+        "email",
+        "website",
+    ]
+    ordering_fields = [
+        "name",
+        "industry",
+        "created_at",
+    ]
 
     def get_queryset(self):
 
@@ -59,6 +76,22 @@ class CompanyViewSet(ModelViewSet):
 class ContactViewSet(ModelViewSet):
     serializer_class = ContactSerializer
     permission_classes = [IsSalesRep]
+
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_class = ContactFilter
+    search_fields = [
+        "first_name",
+        "last_name",
+        "email",
+        "phone",
+        "city",
+        "status"
+    ]
+    ordering_fields = [
+        "first_name",
+        "last_name",
+        "created_at",
+    ]
 
     def get_queryset(self):
 

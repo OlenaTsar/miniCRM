@@ -36,6 +36,7 @@ class ContactSerializer(serializers.ModelSerializer):
             'last_name',
             'email',
             'phone',
+            'city',
             'instagram_url',
             'facebook_url',
             'created_at',
