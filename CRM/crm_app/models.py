@@ -15,6 +15,15 @@ class Company(models.Model):
     facebook_url = models.URLField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        default=None,
+        null=True,
+        blank=True,
+        related_name='companies',
+    )
+
 
 class ContactStatus(models.TextChoices):
     LEAD = "lead", "Lead"
@@ -56,7 +65,7 @@ class Contact(models.Model):
         blank=True,
         related_name='contacts',
     )
-    users = models.ForeignKey(
+    user = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
         default=None,

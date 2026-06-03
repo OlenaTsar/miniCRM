@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from auth_app.models import User
+from auth_app.models import User, Team
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -14,6 +14,7 @@ class UserSerializer(serializers.ModelSerializer):
             'role',
             'is_active',
             'created_at',
+            'team',
         ]
         read_only_fields = [
             'id',
@@ -30,11 +31,13 @@ class MeSerializer(serializers.ModelSerializer):
             'first_name',
             'last_name',
             'role',
+            'team',
         ]
         read_only_fields = [
             'id',
             'email',
             'role',
+            'team',
         ]
 
 
@@ -44,4 +47,18 @@ class MeUpdateSerializer(serializers.ModelSerializer):
         fields = [
             'first_name',
             'last_name',
+        ]
+
+
+class TeamSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Team
+        fields = [
+            'id',
+            'name',
+            'users',
+        ]
+        read_only_fields = [
+            'id',
+            'users',
         ]

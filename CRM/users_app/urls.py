@@ -1,13 +1,9 @@
-from django.urls import path
 from rest_framework.routers import DefaultRouter
 
-from .views import UserViewSet
+from .views import UserViewSet, TeamViewSet
 
 router = DefaultRouter()
-router.register('', UserViewSet, basename='user')
+router.register('users', UserViewSet, basename='user')
+router.register('teams', TeamViewSet, basename='team')
 
 urlpatterns = router.urls
-
-# urlpatterns += [
-#     path('me/', MeAPIView.as_view()),
-# ]
