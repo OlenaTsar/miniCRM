@@ -74,3 +74,71 @@ class Contact(models.Model):
         blank=True,
         related_name='contacts',
     )
+
+
+class Product(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=255, null=False, blank=False)
+    description = models.TextField(null=True, blank=True)
+
+    team = models.ForeignKey(
+        Team,
+        on_delete=models.SET_NULL,
+        default=None,
+        null=True,
+        blank=True,
+        related_name='products',
+    )
+
+
+class Pipeline(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=255, null=False, blank=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    team = models.ForeignKey(
+        Team,
+        on_delete=models.SET_NULL,
+        default=None,
+        null=True,
+        blank=True,
+        related_name='pipelines',
+    )
+    assigned_to = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        default=None,
+        null=True,
+        blank=True,
+        related_name='pipelines',
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.SET_NULL,
+        default=None,
+        null=True,
+        blank=True,
+        related_name='pipelines',
+    )
+
+
+class PipelineStage(models.TextChoices):
+    NEW_LEAD = "new_lead", "New Lead"
+    QUALIFICATION = "qualification", "Qualification"
+    PROPOSAL_SENT = "proposal_sent", "Proposal Sent"
+    NEGOTIATION = "negotiation", "Negotiation"
+    CLOSED_WON = "closed_won", "Closed Won"
+    CLOSED_LOST = "closed_lost", "Closed Lost"
+
+
+class Stage(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    status = models.CharField(max_length=20, choices=PipelineStage.choices, default=PipelineStage.NEW_LEAD)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_final = models.BooleanField(default=False)  # стає True коли CLOSED_WON або CLOSED_LOST
+
+    pipeline = models.ForeignKey(
+        Pipeline,
+        on_delete=models.CASCADE,
+        related_name='stages',
+    )
