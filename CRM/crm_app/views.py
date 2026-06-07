@@ -1,4 +1,5 @@
 from django.http import HttpResponse
+from rest_framework.generics import get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.response import Response
@@ -8,10 +9,17 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.parsers import MultiPartParser
 from tablib import Dataset
 
-from .permissions import IsSalesRep, IsManager
+from .permissions import IsSalesRep, IsManager, IsAdmin
 from auth_app.models import UserRole
-from .models import Company, Contact
-from .serializers import CompanySerializer, ContactSerializer
+from .models import Company, Contact, Product, Deal, Pipeline, PipelineStage, DealStatus
+from .serializers import (
+    CompanySerializer,
+    ContactSerializer,
+    ProductSerializer,
+    PipelineSerializer,
+    DealSerializer,
+    ChangeStageSerializer,
+)
 from .filters import ContactFilter, CompanyFilter
 from .resources import ContactResource
 
@@ -52,7 +60,7 @@ class CompanyViewSet(ModelViewSet):
     def add_contact(self, request, pk=None):
         company = self.get_object()
         contact_id = request.data.get("contact")
-        contact_obj = Contact.objects.get(id=contact_id)
+        contact_obj = get_object_or_404(Contact, id=contact_id)
 
         if contact_obj.company == company:
             return Response({"detail": "Контакт вже доданий до цієї компанії."})
@@ -68,7 +76,7 @@ class CompanyViewSet(ModelViewSet):
     def remove_contact(self, request, pk=None):
         company = self.get_object()
         contact_id = request.data.get("contact")
-        contact_obj = Contact.objects.get(id=contact_id)
+        contact_obj = get_object_or_404(Contact, id=contact_id)
 
         if contact_obj.company != company:
             return Response({"detail": "Контакт не належить до цієї компанії."})
@@ -175,3 +183,124 @@ class ContactExportView(APIView):
         response = HttpResponse(content, content_type=content_type)
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         return response
+
+
+class ProductViewSet(ModelViewSet):
+    serializer_class = ProductSerializer
+    queryset = Product.objects.all()
+
+    def get_permissions(self):
+        if self.action in [
+            "list",  # GET
+            "retrieve",  # GET id
+        ]:
+            return [IsSalesRep()]
+        return [IsManager()]
+
+
+class PipelineViewSet(ModelViewSet):
+    serializer_class = PipelineSerializer
+    permission_classes = [IsSalesRep]
+
+    def get_queryset(self):
+
+        user = self.request.user
+
+        if user.role == UserRole.ADMIN:
+            return Pipeline.objects.all()
+        elif user.role == UserRole.MANAGER:
+            return Pipeline.objects.filter(assigned_to__team=user.team)
+        else:
+            return Pipeline.objects.filter(assigned_to=user)
+
+    def perform_create(self, serializer):
+        serializer.save(assigned_to=self.request.user)
+
+
+class DealViewSet(ModelViewSet):
+    serializer_class = DealSerializer
+    permission_classes = [IsSalesRep]
+
+    def get_queryset(self):
+
+        user = self.request.user
+
+        if user.role == UserRole.ADMIN:
+            return Deal.objects.all()
+        elif user.role == UserRole.MANAGER:
+            return Deal.objects.filter(assigned_to__team=user.team)
+        else:
+            return Deal.objects.filter(assigned_to=user)
+
+    def perform_create(self, serializer):
+        serializer.save(assigned_to=self.request.user)
+
+    @action(detail=True, methods=["post"], url_path="change-stage")
+    def change_stage(self, request, pk=None):
+        deal = self.get_object()
+
+        if deal.is_final:
+            return Response({"detail": "Неможливо змінити stage завершеної угоди."}, status=400)
+
+        if deal.status == DealStatus.ON_HOLD:
+            return Response({"detail": "Неможливо змінити stage. Угода на паузі."}, status=400)
+
+        # перевірка чи stage є в PipelineStage
+        serializer = ChangeStageSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        new_stage = serializer.validated_data["stage"]
+        deal.stage = new_stage
+
+        deal.is_final = new_stage in (PipelineStage.CLOSED_WON, PipelineStage.CLOSED_LOST)
+
+        # змінюємо статус угоди
+        if new_stage == PipelineStage.NEW_LEAD:
+            deal.status = DealStatus.NEW
+        elif new_stage == PipelineStage.NEGOTIATION:
+            deal.status = DealStatus.NEGOTIATION
+        elif new_stage == PipelineStage.CLOSED_WON:
+            deal.status = DealStatus.WON
+        elif new_stage == PipelineStage.CLOSED_LOST:
+            deal.status = DealStatus.LOST
+        else:
+            deal.status = DealStatus.IN_PROGRESS
+
+        deal.save()
+
+        # повертає оновлений об'єкт
+        return Response(DealSerializer(deal).data)
+
+    @action(detail=True, methods=["post"], url_path="on-hold")
+    def on_hold(self, request, pk=None):
+        deal = self.get_object()
+
+        if deal.is_final:
+            return Response({"detail": "Неможливо змінити статус завершеної угоди."}, status=400)
+
+        deal.status = DealStatus.ON_HOLD
+
+        deal.save()
+
+        # повертає оновлений об'єкт
+        return Response(DealSerializer(deal).data)
+
+    @action(detail=True, methods=["post"], url_path="unhold")
+    def unhold(self, request, pk=None):
+        deal = self.get_object()
+
+        if deal.is_final:
+            return Response({"detail": "Неможливо змінити статус завершеної угоди."}, status=400)
+
+        if deal.status != DealStatus.ON_HOLD:
+            return Response({"detail": "Угода не була на паузі."}, status=400)
+
+        if deal.stage == PipelineStage.NEGOTIATION:
+            deal.status = DealStatus.NEGOTIATION
+        else:
+            deal.status = DealStatus.IN_PROGRESS
+
+        deal.save()
+
+        # повертає оновлений об'єкт
+        return Response(DealSerializer(deal).data)

@@ -78,14 +78,11 @@ class Contact(models.Model):
 
 class Product(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=255, null=False, blank=False)
+    name = models.CharField(max_length=255, null=False, blank=False, unique=True)
     description = models.TextField(null=True, blank=True)
 
-    team = models.ForeignKey(
+    teams = models.ManyToManyField(
         Team,
-        on_delete=models.SET_NULL,
-        default=None,
-        null=True,
         blank=True,
         related_name='products',
     )
@@ -96,14 +93,6 @@ class Pipeline(models.Model):
     name = models.CharField(max_length=255, null=False, blank=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    team = models.ForeignKey(
-        Team,
-        on_delete=models.SET_NULL,
-        default=None,
-        null=True,
-        blank=True,
-        related_name='pipelines',
-    )
     assigned_to = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -163,7 +152,7 @@ class Deal(models.Model):
     pipeline = models.ForeignKey(
         Pipeline,
         on_delete=models.CASCADE,
-        related_name='stages',
+        related_name='deals',
     )
     product = models.ForeignKey(
         Product,
