@@ -131,14 +131,63 @@ class PipelineStage(models.TextChoices):
     CLOSED_LOST = "closed_lost", "Closed Lost"
 
 
-class Stage(models.Model):
+class DealStatus(models.TextChoices):
+    NEW = "new", "New"
+    IN_PROGRESS = "in_progress", "In Progress"
+    ON_HOLD = "on_hold", "On Hold"
+    NEGOTIATION = "negotiation", "Negotiation"
+    WON = "won", "Won"
+    LOST = "lost", "Lost"
+
+
+class Currency(models.TextChoices):
+    UAH = "UAH", "Ukrainian Hryvnia"
+    USD = "USD", "US Dollar"
+    EUR = "EUR", "Euro"
+    GBP = "GBP", "British Pound"
+    PLN = "PLN", "Polish Zloty"
+
+
+class Deal(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    status = models.CharField(max_length=20, choices=PipelineStage.choices, default=PipelineStage.NEW_LEAD)
+    name = models.CharField(max_length=255, null=False, blank=False)
+    description = models.TextField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=DealStatus.choices, default=DealStatus.NEW)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    currency = models.CharField(max_length=3, choices=Currency.choices, default=Currency.UAH)
+    expected_close_date = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    is_final = models.BooleanField(default=False)  # стає True коли CLOSED_WON або CLOSED_LOST
+    stage = models.CharField(max_length=20, choices=PipelineStage.choices, default=PipelineStage.NEW_LEAD)
+    is_final = models.BooleanField(default=False)  # стає True коли PipelineStage CLOSED_WON або CLOSED_LOST
 
     pipeline = models.ForeignKey(
         Pipeline,
         on_delete=models.CASCADE,
         related_name='stages',
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name='deals',
+    )
+    contacts = models.ManyToManyField(
+        Contact,
+        blank=True,
+        related_name='deals',
+    )
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.SET_NULL,
+        default=None,
+        null=True,
+        blank=True,
+        related_name='deals',
+    )
+    assigned_to = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        default=None,
+        null=True,
+        blank=True,
+        related_name='deals',
     )
