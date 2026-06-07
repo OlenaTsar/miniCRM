@@ -41,15 +41,15 @@ class CompanyViewSet(ModelViewSet):
         if user.role == UserRole.ADMIN:
             return Company.objects.all()
         elif user.role == UserRole.MANAGER:
-            return Company.objects.filter(user__team=user.team)
+            return Company.objects.filter(assigned_to__team=user.team)
         else:
-            return Company.objects.filter(user=user)
+            return Company.objects.filter(assigned_to=user)
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        serializer.save(assigned_to=self.request.user)
 
     @action(detail=True, methods=["post"], url_path="add-contact")
-    def add_user(self, request, pk=None):
+    def add_contact(self, request, pk=None):
         company = self.get_object()
         contact_id = request.data.get("contact")
         contact_obj = Contact.objects.get(id=contact_id)
@@ -65,7 +65,7 @@ class CompanyViewSet(ModelViewSet):
         return Response({"detail": "Контакт додано."})
 
     @action(detail=True, methods=["post"], url_path="remove-contact")
-    def remove_user(self, request, pk=None):
+    def remove_contact(self, request, pk=None):
         company = self.get_object()
         contact_id = request.data.get("contact")
         contact_obj = Contact.objects.get(id=contact_id)
@@ -105,12 +105,12 @@ class ContactViewSet(ModelViewSet):
         if user.role == UserRole.ADMIN:
             return Contact.objects.all()
         elif user.role == UserRole.MANAGER:
-            return Contact.objects.filter(user__team=user.team)
+            return Contact.objects.filter(assigned_to__team=user.team)
         else:
-            return Contact.objects.filter(user=user)
+            return Contact.objects.filter(assigned_to=user)
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        serializer.save(assigned_to=self.request.user)
 
 
 class ContactImportView(APIView):
@@ -123,7 +123,7 @@ class ContactImportView(APIView):
             return Response({"detail": "Файл не надано."}, status=400)
 
         resource = ContactResource()
-        resource.user = request.user
+        resource.assigned_to = request.user
 
         dataset = Dataset()
         dataset.load(file.read().decode("utf-8"), format="csv")
@@ -145,18 +145,15 @@ class ContactExportView(APIView):
     permission_classes = [IsManager]
 
     def get(self, request):
-        print("format:", request.query_params.get("file_format"))
-        print("user:", request.user)
-        print("user role:", request.user.role)
         user = self.request.user
 
         export_format = request.query_params.get("file_format", "csv")
 
-        queryset = Contact.objects.filter(user__team=user.team)
+        queryset = Contact.objects.filter(assigned_to__team=user.team)
 
         assigned_to = request.query_params.get("assigned_to")
         if assigned_to:
-            queryset = queryset.filter(user=assigned_to)
+            queryset = queryset.filter(assigned_to=assigned_to)
 
         status = request.query_params.get("status")
         if status:

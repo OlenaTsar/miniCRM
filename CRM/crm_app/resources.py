@@ -15,9 +15,9 @@ class ContactResource(resources.ModelResource):
             'facebook_url',
             'status',
             'lead_source',
-            'user',
+            'assigned_to',
         ]
         import_id_fields = ["email"]  # унікальний ідентифікатор
 
     def before_import_row(self, row, **kwargs):
-        row["user"] = str(self.user.id)
+        row["assigned_to"] = str(self.user.id)

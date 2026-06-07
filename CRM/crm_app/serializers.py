@@ -17,13 +17,13 @@ class CompanySerializer(serializers.ModelSerializer):
             'facebook_url',
             'created_at',
             'contacts',
-            'user',
+            'assigned_to',
         ]
         read_only_fields = [
             'id',
             'created_at',
             'contacts',
-            'user',
+            'assigned_to',
         ]
 
 
@@ -43,10 +43,10 @@ class ContactSerializer(serializers.ModelSerializer):
             'status',
             'lead_source',
             'company',
-            'user',
+            'assigned_to',
         ]
         read_only_fields = [
             'id',
             'created_at',
-            'user',
+            'assigned_to',
         ]
