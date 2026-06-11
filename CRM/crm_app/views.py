@@ -9,7 +9,7 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.parsers import MultiPartParser
 from tablib import Dataset
 
-from .permissions import IsSalesRep, IsManager, IsAdmin
+from .permissions import IsSalesRep, IsManager
 from auth_app.models import UserRole
 from .models import Company, Contact, Product, Deal, Pipeline, PipelineStage, DealStatus
 from .serializers import (
@@ -20,7 +20,7 @@ from .serializers import (
     DealSerializer,
     ChangeStageSerializer,
 )
-from .filters import ContactFilter, CompanyFilter
+from .filters import ContactFilter, CompanyFilter, DealFilter
 from .resources import ContactResource
 
 
@@ -100,6 +100,7 @@ class ContactViewSet(ModelViewSet):
         "city",
         "status"
     ]
+    # sorting
     ordering_fields = [
         "first_name",
         "last_name",
@@ -220,6 +221,21 @@ class PipelineViewSet(ModelViewSet):
 class DealViewSet(ModelViewSet):
     serializer_class = DealSerializer
     permission_classes = [IsSalesRep]
+
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_class = DealFilter
+    search_fields = [
+        "name",
+        "contacts",
+        "company",
+    ]
+    # sorting
+    ordering_fields = [
+        "name",
+        "expected_close_date",
+        "amount",
+        "created_at",
+    ]
 
     def get_queryset(self):
 
