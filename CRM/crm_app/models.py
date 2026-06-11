@@ -182,3 +182,26 @@ class Deal(models.Model):
         blank=True,
         related_name='deals',
     )
+
+
+class DealStageHistory(models.Model):
+    # для збереження історії зміни stage
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    old_stage = models.CharField(max_length=20, choices=PipelineStage.choices, null=False)
+    new_stage = models.CharField(max_length=20, choices=PipelineStage.choices, null=False)
+    changed_at = models.DateTimeField(auto_now_add=True)
+
+    deal = models.ForeignKey(
+        Deal,
+        null=False,
+        blank=False,
+        on_delete=models.CASCADE,
+        related_name="stage_history",
+    )
+    changed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=False,
+        related_name="deal_stage_history",
+    )

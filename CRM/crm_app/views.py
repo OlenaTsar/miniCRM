@@ -19,6 +19,7 @@ from .serializers import (
     PipelineSerializer,
     DealSerializer,
     ChangeStageSerializer,
+    DealStageHistorySerializer,
 )
 from .filters import ContactFilter, CompanyFilter, DealFilter
 from .resources import ContactResource
@@ -264,11 +265,16 @@ class DealViewSet(ModelViewSet):
         serializer.is_valid(raise_exception=True)
 
         new_stage = serializer.validated_data["stage"]
+
+        if deal.stage == new_stage:
+            # якщо stage не змінився - не буде внесено змін до бд і не спрацює signal log_stage_change
+            return Response(DealSerializer(deal).data)
+
         deal.stage = new_stage
 
         deal.is_final = new_stage in (PipelineStage.CLOSED_WON, PipelineStage.CLOSED_LOST)
 
-        # змінюємо статус угоди
+        # змінюємо статус угоди, відповідно до нового stage
         if new_stage == PipelineStage.NEW_LEAD:
             deal.status = DealStatus.NEW
         elif new_stage == PipelineStage.NEGOTIATION:
@@ -280,6 +286,8 @@ class DealViewSet(ModelViewSet):
         else:
             deal.status = DealStatus.IN_PROGRESS
 
+        deal._changed_by = request.user  # for signal log_stage_change
+        # при збереженні спрацює signal
         deal.save()
 
         # повертає оновлений об'єкт
@@ -306,3 +314,10 @@ class DealViewSet(ModelViewSet):
 
         # повертає оновлений об'єкт
         return Response(DealSerializer(deal).data)
+
+    @action(detail=True, methods=["get"], url_path="stage-history")
+    def stage_history(self, request, pk=None):
+        deal = self.get_object()
+        history = deal.stage_history.all().order_by("-changed_at")
+        serializer = DealStageHistorySerializer(history, many=True)
+        return Response(serializer.data)

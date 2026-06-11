@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Company, Contact, Product, Deal, Pipeline, PipelineStage
+from .models import Company, Contact, Product, Deal, Pipeline, PipelineStage, DealStageHistory
 from auth_app.models import UserRole
 
 
@@ -155,3 +155,18 @@ class DealSerializer(serializers.ModelSerializer):
 
 class ChangeStageSerializer(serializers.Serializer):
     stage = serializers.ChoiceField(choices=PipelineStage.choices)
+
+
+class DealStageHistorySerializer(serializers.ModelSerializer):
+    changed_by = serializers.StringRelatedField()  # для відображення __str__ юзера (email)
+
+    class Meta:
+        model = DealStageHistory
+        fields = [
+            "id",
+            "old_stage",
+            "new_stage",
+            "changed_by",
+            "changed_at",
+        ]
+        read_only_fields = fields
