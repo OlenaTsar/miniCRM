@@ -67,6 +67,14 @@ class ProductSerializer(serializers.ModelSerializer):
             'teams'
         ]
 
+    # щоб SalesRep не мав доступу до перегляду teams
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+        if request and request.user.role == UserRole.SALES_REP:
+            data.pop("teams", None)
+        return data
+
 
 class PipelineSerializer(serializers.ModelSerializer):
     class Meta:
@@ -123,7 +131,7 @@ class DealSerializer(serializers.ModelSerializer):
         read_only_fields = [
             'id',
             'created_at',
-            'product',
+            # 'product',
             'stage',
             'status',
             'is_final',

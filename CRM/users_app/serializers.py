@@ -57,8 +57,10 @@ class TeamSerializer(serializers.ModelSerializer):
             'id',
             'name',
             'users',
+            'products',
         ]
         read_only_fields = [
             'id',
             'users',
+            'products',
         ]

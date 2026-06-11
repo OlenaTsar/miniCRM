@@ -15,8 +15,11 @@ class CompanyFilter(django_filters.FilterSet):
 
 
 class DealFilter(django_filters.FilterSet):
-    # автоматично створює amount_min і amount_max, для фільтрування за мінімальною і максимальною ціною
-    amount = django_filters.RangeFilter()
+    # звичайний фільтр для amount=
+    amount = django_filters.NumberFilter(field_name="amount", lookup_expr="exact")
+    # створює amount_min і amount_max, для фільтрування за мінімальною і максимальною ціною
+    amount_min = django_filters.NumberFilter(field_name="amount", lookup_expr="gte")
+    amount_max = django_filters.NumberFilter(field_name="amount", lookup_expr="lte")
 
     class Meta:
         model = Deal
@@ -29,4 +32,6 @@ class DealFilter(django_filters.FilterSet):
             'created_at',
             'pipeline',
             'amount',
+            'amount_min',
+            'amount_max',
         ]

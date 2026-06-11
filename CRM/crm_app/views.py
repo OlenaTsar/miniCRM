@@ -226,8 +226,6 @@ class DealViewSet(ModelViewSet):
     filterset_class = DealFilter
     search_fields = [
         "name",
-        "contacts",
-        "company",
     ]
     # sorting
     ordering_fields = [
@@ -287,34 +285,22 @@ class DealViewSet(ModelViewSet):
         # повертає оновлений об'єкт
         return Response(DealSerializer(deal).data)
 
-    @action(detail=True, methods=["post"], url_path="on-hold")
-    def on_hold(self, request, pk=None):
+    @action(detail=True, methods=["post"], url_path="hold")
+    def hold(self, request, pk=None):
         deal = self.get_object()
 
         if deal.is_final:
             return Response({"detail": "Неможливо змінити статус завершеної угоди."}, status=400)
 
-        deal.status = DealStatus.ON_HOLD
-
-        deal.save()
-
-        # повертає оновлений об'єкт
-        return Response(DealSerializer(deal).data)
-
-    @action(detail=True, methods=["post"], url_path="unhold")
-    def unhold(self, request, pk=None):
-        deal = self.get_object()
-
-        if deal.is_final:
-            return Response({"detail": "Неможливо змінити статус завершеної угоди."}, status=400)
-
-        if deal.status != DealStatus.ON_HOLD:
-            return Response({"detail": "Угода не була на паузі."}, status=400)
-
-        if deal.stage == PipelineStage.NEGOTIATION:
-            deal.status = DealStatus.NEGOTIATION
+        if deal.status == DealStatus.ON_HOLD:
+            if deal.stage == PipelineStage.NEW_LEAD:
+                deal.status = DealStatus.NEW
+            elif deal.stage == PipelineStage.NEGOTIATION:
+                deal.status = DealStatus.NEGOTIATION
+            else:
+                deal.status = DealStatus.IN_PROGRESS
         else:
-            deal.status = DealStatus.IN_PROGRESS
+            deal.status = DealStatus.ON_HOLD
 
         deal.save()
 
