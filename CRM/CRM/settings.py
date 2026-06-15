@@ -167,3 +167,7 @@ FRONTEND_URL = os.getenv("FRONTEND_URL")
 CELERY_BROKER_URL = "redis://localhost:6379/0"
 CELERY_RESULT_BACKEND = "django-db"  # зберігає результати tasks у БД
 CELERY_TIMEZONE = "Europe/Kyiv"
+
+# Media files
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"

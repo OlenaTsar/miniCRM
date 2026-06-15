@@ -11,6 +11,7 @@ class UserSerializer(serializers.ModelSerializer):
             'email',
             'first_name',
             'last_name',
+            'avatar',
             'role',
             'is_active',
             'is_verified',
@@ -32,6 +33,7 @@ class MeSerializer(serializers.ModelSerializer):
             'email',
             'first_name',
             'last_name',
+            'avatar',
             'role',
             'team',
         ]
@@ -49,6 +51,7 @@ class MeUpdateSerializer(serializers.ModelSerializer):
         fields = [
             'first_name',
             'last_name',
+            'avatar',
         ]
 
 

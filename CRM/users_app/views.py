@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.generics import get_object_or_404
+from rest_framework.parsers import MultiPartParser, FormParser
 
 from .permissions import IsAdmin, IsManager, IsEmployee
 from auth_app.models import User, UserRole, Team
@@ -49,6 +50,8 @@ class UserViewSet(
             return Response(serializer.data)
 
         # PATCH
+        self.parser_classes = [MultiPartParser, FormParser]  # для avatar
+
         serializer = MeUpdateSerializer(
             request.user,
             data=request.data,
