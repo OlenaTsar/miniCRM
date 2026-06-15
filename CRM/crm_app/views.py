@@ -248,7 +248,11 @@ class DealViewSet(ModelViewSet):
             return Deal.objects.filter(assigned_to=user)
 
     def perform_create(self, serializer):
-        serializer.save(assigned_to=self.request.user)
+        # щоб product угоди був такий, як в pipeline, до якої вона належить
+        pipeline_id = self.request.data['pipeline']
+        product = Pipeline.objects.get(id=pipeline_id).product
+
+        serializer.save(assigned_to=self.request.user, product=product)
 
     @action(detail=True, methods=["post"], url_path="change-stage")
     def change_stage(self, request, pk=None):

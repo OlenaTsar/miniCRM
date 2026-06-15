@@ -89,8 +89,15 @@ class PipelineSerializer(serializers.ModelSerializer):
         read_only_fields = [
             'id',
             'created_at',
-            'product',
         ]
+
+    def get_fields(self):
+        # щоб не можливо було змінити product після створення
+        fields = super().get_fields()
+        # якщо це оновлення (instance вже є) — product стає read_only
+        if self.instance is not None:
+            fields["product"].read_only = True
+        return fields
 
     def validate(self, attrs):
         # забороняє SALES_REP змінювати assigned_to
@@ -131,7 +138,7 @@ class DealSerializer(serializers.ModelSerializer):
         read_only_fields = [
             'id',
             'created_at',
-            # 'product',
+            'product',
             'stage',
             'status',
             'is_final',

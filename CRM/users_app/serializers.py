@@ -13,12 +13,14 @@ class UserSerializer(serializers.ModelSerializer):
             'last_name',
             'role',
             'is_active',
+            'is_verified',
             'created_at',
             'team',
         ]
         read_only_fields = [
             'id',
             'created_at',
+            'is_verified',
         ]
 
 

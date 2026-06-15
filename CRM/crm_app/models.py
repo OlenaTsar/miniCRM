@@ -103,10 +103,9 @@ class Pipeline(models.Model):
     )
     product = models.ForeignKey(
         Product,
-        on_delete=models.SET_NULL,
-        default=None,
-        null=True,
-        blank=True,
+        on_delete=models.CASCADE,
+        null=False,
+        blank=False,
         related_name='pipelines',
     )
 
@@ -158,7 +157,7 @@ class Deal(models.Model):
         Product,
         on_delete=models.CASCADE,
         null=False,
-        blank=False,
+        blank=True,
         related_name='deals',
     )
     contacts = models.ManyToManyField(
