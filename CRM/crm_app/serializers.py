@@ -1,6 +1,21 @@
+from django.utils import timezone
+from datetime import timedelta
+
 from rest_framework import serializers
 
-from .models import Company, Contact, Product, Deal, Pipeline, PipelineStage, DealStageHistory
+from .models import (
+    Company,
+    Contact,
+    Product,
+    Deal,
+    Pipeline,
+    PipelineStage,
+    DealStageHistory,
+    Activity,
+    ActivityLog,
+    Notification,
+    ActivityScript,
+)
 from auth_app.models import UserRole
 
 
@@ -45,11 +60,13 @@ class ContactSerializer(serializers.ModelSerializer):
             'lead_source',
             'company',
             'assigned_to',
+            'activities',
         ]
         read_only_fields = [
             'id',
             'created_at',
             'assigned_to',
+            'activities',
         ]
 
 
@@ -134,6 +151,7 @@ class DealSerializer(serializers.ModelSerializer):
             'contacts',
             'company',
             'assigned_to',
+            'activities',
         ]
         read_only_fields = [
             'id',
@@ -142,6 +160,7 @@ class DealSerializer(serializers.ModelSerializer):
             'stage',
             'status',
             'is_final',
+            'activities',
         ]
 
     def validate(self, attrs):
@@ -177,3 +196,121 @@ class DealStageHistorySerializer(serializers.ModelSerializer):
             "changed_at",
         ]
         read_only_fields = fields
+
+
+class ActivitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Activity
+        fields = [
+            'id',
+            'title',
+            'description',
+            'activity_type',
+            'outcome',
+            'created_at',
+            'due_date',
+            'completed_at',
+            'assigned_to',
+            'contact',
+            'deal',
+        ]
+        read_only_fields = [
+            'id',
+            'created_at',
+        ]
+
+    def get_fields(self):
+        # щоб не можливо було змінити поля після створення
+        fields = super().get_fields()
+        if self.instance is not None:
+            fields["deal"].read_only = True
+            fields["contact"].read_only = True
+            fields["activity_type"].read_only = True
+        return fields
+
+    def validate(self, attrs):
+        now = timezone.now()
+
+        # забороняє змінювати будь-які поля, окрім outcome, для завершеної Activity
+        if self.instance and self.instance.completed_at:
+            forbidden_fields = set(attrs.keys()) - {"outcome"}
+            if forbidden_fields:
+                raise serializers.ValidationError(
+                    "You cannot change any fields except outcome in a completed activity."
+                )
+
+        # забороняє SALES_REP змінювати і передавати при створенні assigned_to
+
+        user = self.context["request"].user
+
+        if (
+                user.role == UserRole.SALES_REP
+                and "assigned_to" in attrs
+        ):
+            raise serializers.ValidationError(
+                {"assigned_to": "You cannot change assignee."}
+            )
+
+        # перевіряємо чи коректний due_date
+        if "due_date" in attrs and attrs["due_date"] < now + timedelta(minutes=5):
+            raise serializers.ValidationError(
+                {"due_date": "Activity due date must be more than 5 minutes from the current time."}
+            )
+
+        return attrs
+
+    def create(self, validated_data):
+        # щоб передати _changed_by в signal
+        activity = Activity(**validated_data)
+        activity._changed_by = self.context["request"].user
+        activity.save()
+        return activity
+
+
+class ActivityLogSerializer(serializers.ModelSerializer):
+    performed_by = serializers.StringRelatedField()  # для відображення __str__ юзера (email)
+
+    class Meta:
+        model = ActivityLog
+        fields = [
+            'id',
+            'action',
+            'old_data',
+            'new_data',
+            'timestamp',
+            'performed_by',
+        ]
+        read_only_fields = fields
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = [
+            'id',
+            'notify_at',
+            'sent_at',
+            'read_at',
+            'recipient',
+            'activity',
+        ]
+        read_only_fields = fields
+
+
+class ActivityScriptSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ActivityScript
+        fields = [
+            'id',
+            'title',
+            'text',
+            'attachment',
+            'activity_type',
+            'stage',
+            'product',
+            'created_by',
+        ]
+        read_only_fields = [
+            'id',
+            'created_by',
+        ]

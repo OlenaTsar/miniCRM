@@ -1,5 +1,5 @@
 import django_filters
-from .models import Company, Contact, Deal
+from .models import Company, Contact, Deal, Activity, ActivityScript
 
 
 class ContactFilter(django_filters.FilterSet):
@@ -34,4 +34,29 @@ class DealFilter(django_filters.FilterSet):
             'amount',
             'amount_min',
             'amount_max',
+        ]
+
+
+class ActivityFilter(django_filters.FilterSet):
+    class Meta:
+        model = Activity
+        fields = [
+            'activity_type',
+            'created_at',
+            'due_date',
+            'completed_at',
+            'assigned_to',
+            'contact',
+            'deal',
+        ]
+
+
+class ActivityScriptFilter(django_filters.FilterSet):
+    class Meta:
+        model = ActivityScript
+        fields = [
+            'activity_type',
+            'stage',
+            'product',
+            'created_by',
         ]

@@ -204,3 +204,127 @@ class DealStageHistory(models.Model):
         blank=False,
         related_name="deal_stage_history",
     )
+
+
+class ActivityType(models.TextChoices):
+    CALL = "call", "Call"
+    EMAIL = "email", "Email"
+    MEETING = "meeting", "Meeting"
+    TASK = "task", "Task"
+    PROPOSAL = "proposal", "Send a proposal"
+    CONTRACT = "contract", "Signing the contract"
+    OTHER = "other", "Other"
+
+
+class Activity(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    title = models.CharField(max_length=255, null=False, blank=False)
+    description = models.TextField(null=True, blank=True)
+    activity_type = models.CharField(max_length=30, choices=ActivityType.choices, null=False, blank=False)
+    outcome = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    due_date = models.DateTimeField(null=False, blank=False)
+    completed_at = models.DateTimeField(null=True, blank=True, default=None)
+
+    assigned_to = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        null=False,
+        blank=True,
+        related_name='activities',
+    )
+    contact = models.ForeignKey(
+        Contact,
+        on_delete=models.CASCADE,
+        null=False,
+        blank=False,
+        related_name='activities',
+    )
+    deal = models.ForeignKey(
+        Deal,
+        null=False,
+        blank=False,
+        on_delete=models.CASCADE,
+        related_name="activities",
+    )
+
+
+class ActivityLog(models.Model):
+    class Action(models.TextChoices):
+        CREATED = "created", "Created"
+        UPDATED = "updated", "Updated"
+        COMPLETED = "completed", "Completed"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    action = models.CharField(max_length=20, choices=Action.choices)
+    old_data = models.JSONField(null=True)  # null при created
+    new_data = models.JSONField(null=False)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    activity = models.ForeignKey(
+        Activity,
+        null=False,
+        on_delete=models.CASCADE,
+        related_name="activity_log",
+    )
+    performed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="activity_logs"
+    )
+
+
+class Notification(models.Model):
+    class Meta:
+        # для пришвидшення пошуку у бд
+        indexes = [
+            models.Index(
+                fields=["sent_at", "notify_at"],
+                name="notification_read_notify_idx",
+            ),
+        ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    notify_at = models.DateTimeField(null=False, blank=False)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    read_at = models.DateTimeField(null=True, blank=True)
+
+    recipient = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        null=False,
+        blank=False,
+        related_name='notifications',
+    )
+    activity = models.OneToOneField(
+        Activity,
+        null=False,
+        blank=False,
+        on_delete=models.CASCADE,
+        related_name="notification",
+    )
+
+
+class ActivityScript(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    title = models.CharField(max_length=255, null=False, blank=False)
+    text = models.TextField(null=True, blank=True)
+    attachment = models.FileField(upload_to="attachments/", null=True, blank=True)
+    activity_type = models.CharField(max_length=30, choices=ActivityType.choices, null=False, blank=False)
+    stage = models.CharField(max_length=20, choices=PipelineStage.choices, null=False, blank=False)
+
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        null=False,
+        blank=False,
+        related_name='notifications',
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        null=False,
+        blank=False,
+        related_name='activity_scripts',
+    )
