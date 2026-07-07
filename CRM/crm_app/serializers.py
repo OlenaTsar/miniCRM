@@ -61,12 +61,14 @@ class ContactSerializer(serializers.ModelSerializer):
             'company',
             'assigned_to',
             'activities',
+            'deals',
         ]
         read_only_fields = [
             'id',
             'created_at',
             'assigned_to',
             'activities',
+            'deals',
         ]
 
 
@@ -145,7 +147,7 @@ class DealSerializer(serializers.ModelSerializer):
             'expected_close_date',
             'created_at',
             'stage',
-            'is_final',
+            'closed_at',
             'pipeline',
             'product',
             'contacts',
@@ -159,8 +161,9 @@ class DealSerializer(serializers.ModelSerializer):
             'product',
             'stage',
             'status',
-            'is_final',
+            'closed_at',
             'activities',
+            'contacts',
         ]
 
     def validate(self, attrs):
@@ -217,6 +220,7 @@ class ActivitySerializer(serializers.ModelSerializer):
         read_only_fields = [
             'id',
             'created_at',
+            'completed_at',
         ]
 
     def get_fields(self):

@@ -285,7 +285,7 @@ class DealViewSet(ModelViewSet):
     def change_stage(self, request, pk=None):
         deal = self.get_object()
 
-        if deal.is_final:
+        if deal.closed_at:
             return Response({"detail": "Неможливо змінити stage завершеної угоди."}, status=400)
 
         if deal.status == DealStatus.ON_HOLD:
@@ -303,17 +303,14 @@ class DealViewSet(ModelViewSet):
 
         deal.stage = new_stage
 
-        deal.is_final = new_stage in (PipelineStage.CLOSED_WON, PipelineStage.CLOSED_LOST)
+        if new_stage in (PipelineStage.CLOSED_WON, PipelineStage.CLOSED_LOST):
+            deal.closed_at = timezone.now()
 
         # змінюємо статус угоди, відповідно до нового stage
         if new_stage == PipelineStage.NEW_LEAD:
             deal.status = DealStatus.NEW
-        elif new_stage == PipelineStage.NEGOTIATION:
-            deal.status = DealStatus.NEGOTIATION
-        elif new_stage == PipelineStage.CLOSED_WON:
-            deal.status = DealStatus.WON
-        elif new_stage == PipelineStage.CLOSED_LOST:
-            deal.status = DealStatus.LOST
+        elif new_stage in (PipelineStage.CLOSED_WON, PipelineStage.CLOSED_LOST):
+            deal.status = DealStatus.CLOSED
         else:
             deal.status = DealStatus.IN_PROGRESS
 
@@ -328,14 +325,12 @@ class DealViewSet(ModelViewSet):
     def hold(self, request, pk=None):
         deal = self.get_object()
 
-        if deal.is_final:
+        if deal.closed_at:
             return Response({"detail": "Неможливо змінити статус завершеної угоди."}, status=400)
 
         if deal.status == DealStatus.ON_HOLD:
             if deal.stage == PipelineStage.NEW_LEAD:
                 deal.status = DealStatus.NEW
-            elif deal.stage == PipelineStage.NEGOTIATION:
-                deal.status = DealStatus.NEGOTIATION
             else:
                 deal.status = DealStatus.IN_PROGRESS
         else:
@@ -352,6 +347,24 @@ class DealViewSet(ModelViewSet):
         history = deal.stage_history.all().order_by("-changed_at")
         serializer = DealStageHistorySerializer(history, many=True)
         return Response(serializer.data)
+
+    @action(detail=True, methods=["post"], url_path="add-contact")
+    def add_contact(self, request, pk=None):
+        deal = self.get_object()
+        contact_id = request.data.get("contact")
+        contact = get_object_or_404(Contact, id=contact_id)
+
+        deal.contacts.add(contact)
+        return Response({"detail": "Контакт додано."})
+
+    @action(detail=True, methods=["post"], url_path="remove-contact")
+    def remove_contact(self, request, pk=None):
+        deal = self.get_object()
+        contact_id = request.data.get("contact")
+        contact = get_object_or_404(Contact, id=contact_id)
+
+        deal.contacts.remove(contact)
+        return Response({"detail": "Контакт видалено."})
 
 
 class ActivityViewSet(ModelViewSet):
@@ -408,6 +421,17 @@ class ActivityViewSet(ModelViewSet):
         # для передавання _changed_by у signal
         serializer.instance._changed_by = self.request.user
         serializer.save()
+
+    @action(detail=True, methods=["post"], url_path="mark-as-completed")
+    def mark_as_completed(self, request, pk=None):
+        activity = self.get_object()
+
+        if activity.completed_at is None:
+            activity._changed_by = request.user
+            activity.completed_at = timezone.now()
+            activity.save(update_fields=["completed_at"])
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=["get"], url_path="activity-log")
     def activity_log(self, request, pk=None):

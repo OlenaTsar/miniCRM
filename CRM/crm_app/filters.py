@@ -21,6 +21,10 @@ class DealFilter(django_filters.FilterSet):
     amount_min = django_filters.NumberFilter(field_name="amount", lookup_expr="gte")
     amount_max = django_filters.NumberFilter(field_name="amount", lookup_expr="lte")
 
+    # фільтр для діапазону дат (created_at_after= created_at_before=)
+    created_at = django_filters.DateFromToRangeFilter(field_name="created_at")
+    expected_close_date = django_filters.DateFromToRangeFilter(field_name="expected_close_date")
+
     class Meta:
         model = Deal
         fields = [

@@ -123,9 +123,7 @@ class DealStatus(models.TextChoices):
     NEW = "new", "New"
     IN_PROGRESS = "in_progress", "In Progress"
     ON_HOLD = "on_hold", "On Hold"
-    NEGOTIATION = "negotiation", "Negotiation"
-    WON = "won", "Won"
-    LOST = "lost", "Lost"
+    CLOSED = "closed", "Closed"
 
 
 class Currency(models.TextChoices):
@@ -146,7 +144,7 @@ class Deal(models.Model):
     expected_close_date = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     stage = models.CharField(max_length=20, choices=PipelineStage.choices, default=PipelineStage.NEW_LEAD)
-    is_final = models.BooleanField(default=False)  # стає True коли PipelineStage CLOSED_WON або CLOSED_LOST
+    closed_at = models.DateTimeField(null=True, blank=True)
 
     pipeline = models.ForeignKey(
         Pipeline,
