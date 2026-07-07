@@ -12,6 +12,9 @@ from .views import (
     ActivityViewSet,
     NotificationViewSet,
     ActivityScriptViewSet,
+    ContactReportView,
+    DealReportView,
+    ActivityReportView,
 )
 
 router = DefaultRouter()
@@ -27,6 +30,9 @@ router.register('activity-scripts', ActivityScriptViewSet, basename='activity-sc
 urlpatterns = [
     path("contacts-import/", ContactImportView.as_view()),
     path("contacts-export/", ContactExportView.as_view()),
+    path("reports/contacts/", ContactReportView.as_view()),
+    path("reports/deals/", DealReportView.as_view()),
+    path("reports/activity/", ActivityReportView.as_view()),
 ]
 
 urlpatterns += router.urls

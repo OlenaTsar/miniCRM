@@ -41,7 +41,7 @@ from .serializers import (
     ActivityScriptSerializer,
 )
 from .filters import ContactFilter, CompanyFilter, DealFilter, ActivityFilter, ActivityScriptFilter
-from .resources import ContactResource
+from .resources import ContactResource, ContactReportResource, DealReportResource, ActivityReportResource
 
 
 class CompanyViewSet(ModelViewSet):
@@ -182,7 +182,12 @@ class ContactExportView(APIView):
 
         export_format = request.query_params.get("file_format", "csv")
 
-        queryset = Contact.objects.filter(assigned_to__team=user.team)
+        if user.role == UserRole.ADMIN:
+            queryset = Contact.objects.all()
+        elif user.role == UserRole.MANAGER:
+            queryset = Contact.objects.filter(assigned_to__team=user.team)
+        else:
+            queryset = Contact.objects.none()
 
         assigned_to = request.query_params.get("assigned_to")
         if assigned_to:
@@ -527,3 +532,135 @@ class ActivityScriptViewSet(ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+
+class ContactReportView(APIView):
+    permission_classes = [IsSalesRep]
+
+    def get(self, request):
+        user = self.request.user
+
+        export_format = request.query_params.get("file_format", "csv")
+
+        if user.role == UserRole.ADMIN:
+            queryset = Contact.objects.all()
+        elif user.role == UserRole.MANAGER:
+            queryset = Contact.objects.filter(assigned_to__team=user.team)
+        elif user.role == UserRole.SALES_REP:
+            queryset = Contact.objects.filter(assigned_to=user)
+        else:
+            queryset = Contact.objects.none()
+
+        assigned_to = request.query_params.get("assigned_to")
+        if assigned_to:
+            queryset = queryset.filter(assigned_to=assigned_to)
+
+        status = request.query_params.get("status")
+        if status:
+            queryset = queryset.filter(status=status)
+
+        # експорт
+        resource = ContactReportResource()
+        dataset = resource.export(queryset)
+        now = timezone.now().strftime("%d.%m.%Y_%H-%M")
+
+        if export_format == "excel":
+            content = dataset.xlsx
+            content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            filename = f"contacts_report_{now}.xlsx"
+        else:
+            content = dataset.csv.encode("utf-8")
+            content_type = "text/csv"
+            filename = f"contacts_report_{now}.csv"
+
+        response = HttpResponse(content, content_type=content_type)
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
+
+class DealReportView(APIView):
+    permission_classes = [IsSalesRep]
+
+    def get(self, request):
+        user = self.request.user
+
+        export_format = request.query_params.get("file_format", "csv")
+
+        if user.role == UserRole.ADMIN:
+            queryset = Deal.objects.all()
+        elif user.role == UserRole.MANAGER:
+            queryset = Deal.objects.filter(assigned_to__team=user.team)
+        elif user.role == UserRole.SALES_REP:
+            queryset = Deal.objects.filter(assigned_to=user)
+        else:
+            queryset = Deal.objects.none()
+
+        assigned_to = request.query_params.get("assigned_to")
+        if assigned_to:
+            queryset = queryset.filter(assigned_to=assigned_to)
+
+        status = request.query_params.get("status")
+        if status:
+            queryset = queryset.filter(status=status)
+
+        # експорт
+        resource = DealReportResource()
+        dataset = resource.export(queryset)
+        now = timezone.now().strftime("%d.%m.%Y_%H-%M")
+
+        if export_format == "excel":
+            content = dataset.xlsx
+            content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            filename = f"deals_report_{now}.xlsx"
+        else:
+            content = dataset.csv.encode("utf-8")
+            content_type = "text/csv"
+            filename = f"deals_report_{now}.csv"
+
+        response = HttpResponse(content, content_type=content_type)
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
+
+class ActivityReportView(APIView):
+    permission_classes = [IsSalesRep]
+
+    def get(self, request):
+        user = self.request.user
+
+        export_format = request.query_params.get("file_format", "csv")
+
+        if user.role == UserRole.ADMIN:
+            queryset = Activity.objects.all()
+        elif user.role == UserRole.MANAGER:
+            queryset = Activity.objects.filter(assigned_to__team=user.team)
+        elif user.role == UserRole.SALES_REP:
+            queryset = Activity.objects.filter(assigned_to=user)
+        else:
+            queryset = Activity.objects.none()
+
+        assigned_to = request.query_params.get("assigned_to")
+        if assigned_to:
+            queryset = queryset.filter(assigned_to=assigned_to)
+
+        status = request.query_params.get("status")
+        if status:
+            queryset = queryset.filter(status=status)
+
+        # експорт
+        resource = ActivityReportResource()
+        dataset = resource.export(queryset)
+        now = timezone.now().strftime("%d.%m.%Y_%H-%M")
+
+        if export_format == "excel":
+            content = dataset.xlsx
+            content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            filename = f"activities_report_{now}.xlsx"
+        else:
+            content = dataset.csv.encode("utf-8")
+            content_type = "text/csv"
+            filename = f"activities_report_{now}.csv"
+
+        response = HttpResponse(content, content_type=content_type)
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
