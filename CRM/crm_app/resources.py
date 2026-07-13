@@ -7,9 +7,9 @@ from .models import Contact, Company, Deal, Activity, Pipeline, Product
 
 class ContactResource(resources.ModelResource):
     # повертає email замість id
-    assigned_to = fields.Field(
-        column_name="assigned_to",
-        attribute="assigned_to",
+    created_by = fields.Field(
+        column_name="created_by",
+        attribute="created_by",
         widget=ForeignKeyWidget(User, field="email")
     )
     # повертає company name замість id
@@ -32,19 +32,19 @@ class ContactResource(resources.ModelResource):
             'facebook_url',
             'status',
             'lead_source',
-            'assigned_to',
+            'created_by',
         ]
         import_id_fields = ["email"]  # унікальний ідентифікатор
 
     def before_import_row(self, row, **kwargs):
-        row["assigned_to"] = str(self.user.id)
+        row["created_by"] = str(self.user.id)
 
 
 class ContactReportResource(resources.ModelResource):
     # повертає email замість id
-    assigned_to = fields.Field(
-        column_name="assigned_to",
-        attribute="assigned_to",
+    created_by = fields.Field(
+        column_name="created_by",
+        attribute="created_by",
         widget=ForeignKeyWidget(User, field="email")
     )
     # повертає company name замість id
@@ -86,7 +86,7 @@ class ContactReportResource(resources.ModelResource):
             'deals_count',
             'activities_count',
             'lead_source',
-            'assigned_to',
+            'created_by',
         ]
 
 

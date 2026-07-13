@@ -7,7 +7,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 
 from .permissions import IsAdmin, IsManager, IsEmployee
 from auth_app.models import User, UserRole, Team
-from crm_app.models import Product
+from crm_app.models import Product, Pipeline
 from .serializers import UserSerializer, MeUpdateSerializer, MeSerializer, TeamSerializer
 
 
@@ -121,12 +121,20 @@ class TeamViewSet(ModelViewSet):
         team = self.get_object()
         product_name = request.data.get("product")
 
-        # if team.products.filter(name=product_name).exists():
-        #     return Response({"detail": "Команда вже працює з цим продуктом."})
+        if team.products.filter(name=product_name).exists():
+            return Response({"detail": "Команда вже працює з цим продуктом."})
 
         # product name є унікальним, тому шукаємо за ним, а не за id
         product = get_object_or_404(Product, name=product_name)
         team.products.add(product)
+
+        # створення pipeline для кожного користувача
+        for user in team.users.all():
+            Pipeline.objects.create(
+                name=product_name,
+                product=product,
+                assigned_to=user,
+            )
 
         return Response({"detail": f"{product_name} додано."})
 
@@ -138,4 +146,8 @@ class TeamViewSet(ModelViewSet):
 
         team.products.remove(product)
 
-        return Response({"detail": "Користувача видалено."})
+        # видалення pipeline, пов'язаних з цим product, у кожного користувача
+        for pipeline in product.pipelines.all().filter(assigned_to__team=team):
+            pipeline.delete()
+
+        return Response({"detail": f"{product_name} видалено."})

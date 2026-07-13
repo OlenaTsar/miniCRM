@@ -5,8 +5,49 @@ from django.utils import timezone
 from django.db.models.signals import pre_save, post_save
 from django.dispatch import receiver
 
-from .models import Deal, DealStageHistory, Activity, ActivityLog, Notification
-from .serializers import ActivitySerializer, NotificationSerializer
+from .models import Deal, DealStageHistory, Activity, ActivityLog, Notification, Pipeline
+from .serializers import ActivitySerializer
+
+
+@receiver(pre_save, sender=Pipeline)
+def pipeline_change(sender, instance, **kwargs):
+    if not instance.pk:  # новий об'єкт - пропускаємо
+        return
+
+    try:
+        old_pipeline = Pipeline.objects.get(pk=instance.pk)  # старі дані з БД
+    except Pipeline.DoesNotExist:
+        return
+
+    # якщо змінено assigned_to - змінюємо його в Deals (в Activities зміниться автоматично), які належать цій pipeline
+    if old_pipeline.assigned_to != instance.assigned_to:
+        for deal in instance.deals.all():
+            deal.assigned_to = instance.assigned_to
+            deal._changed_by = instance._changed_by
+            deal.save()
+
+
+@receiver(pre_save, sender=Deal)
+def deal_change(sender, instance, **kwargs):
+    if not instance.pk:  # новий об'єкт - пропускаємо
+        return
+
+    try:
+        old_deal = Deal.objects.get(pk=instance.pk)  # старі дані з БД
+    except Deal.DoesNotExist:
+        return
+
+    # якщо змінено assigned_to - змінюємо його в Activities, які належать цій deal
+    if old_deal.assigned_to != instance.assigned_to:
+        for activity in instance.activities.all():
+            activity.assigned_to = instance.assigned_to
+            activity._changed_by = instance._changed_by
+            activity.save()
+
+    # якщо було змінено assigned_to тільки угоди, без зміни усієї pipeline
+    # переносимо угоду в pipeline нового користувача, що відповідає за той самий product
+    if old_deal.assigned_to != instance.assigned_to and instance.pipeline.assigned_to != instance.assigned_to:
+        instance.pipeline = instance.assigned_to.pipelines.filter(product=instance.product).first()
 
 
 @receiver(pre_save, sender=Deal)
@@ -33,6 +74,8 @@ def log_activity_create(sender, instance, created, **kwargs):
     # при створенні Activity
     if not created:  # тільки для нових об'єктів
         return
+
+    # логування
 
     new_data = ActivitySerializer(instance).data
 
@@ -111,6 +154,7 @@ def notification_create_update(sender, instance, created, **kwargs):
 
     updated = []
 
+    # зміна recipient, якщо було змінено assigned_to в активності
     if notification.recipient != instance.assigned_to:
         notification.recipient = instance.assigned_to
         updated.append("recipient")

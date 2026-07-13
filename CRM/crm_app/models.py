@@ -15,7 +15,7 @@ class Company(models.Model):
     facebook_url = models.URLField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    assigned_to = models.ForeignKey(
+    created_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
         default=None,
@@ -66,7 +66,7 @@ class Contact(models.Model):
         blank=True,
         related_name='contacts',
     )
-    assigned_to = models.ForeignKey(
+    created_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
         default=None,
@@ -158,9 +158,11 @@ class Deal(models.Model):
         blank=True,
         related_name='deals',
     )
-    contacts = models.ManyToManyField(
+    contact = models.ForeignKey(
         Contact,
-        blank=True,
+        on_delete=models.CASCADE,
+        null=False,
+        blank=False,
         related_name='deals',
     )
     company = models.ForeignKey(
@@ -214,6 +216,30 @@ class ActivityType(models.TextChoices):
     OTHER = "other", "Other"
 
 
+class ActivityScript(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    title = models.CharField(max_length=255, null=False, blank=False)
+    text = models.TextField(null=True, blank=True)
+    attachment = models.FileField(upload_to="attachments/", null=True, blank=True)
+    activity_type = models.CharField(max_length=30, choices=ActivityType.choices, null=False, blank=False)
+    stage = models.CharField(max_length=20, choices=PipelineStage.choices, null=False, blank=False)
+
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        null=False,
+        blank=False,
+        related_name='notifications',
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        null=False,
+        blank=False,
+        related_name='activity_scripts',
+    )
+
+
 class Activity(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=255, null=False, blank=False)
@@ -235,7 +261,7 @@ class Activity(models.Model):
         Contact,
         on_delete=models.CASCADE,
         null=False,
-        blank=False,
+        blank=True,
         related_name='activities',
     )
     deal = models.ForeignKey(
@@ -243,6 +269,13 @@ class Activity(models.Model):
         null=False,
         blank=False,
         on_delete=models.CASCADE,
+        related_name="activities",
+    )
+    script = models.ForeignKey(
+        ActivityScript,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
         related_name="activities",
     )
 
@@ -301,28 +334,4 @@ class Notification(models.Model):
         blank=False,
         on_delete=models.CASCADE,
         related_name="notification",
-    )
-
-
-class ActivityScript(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    title = models.CharField(max_length=255, null=False, blank=False)
-    text = models.TextField(null=True, blank=True)
-    attachment = models.FileField(upload_to="attachments/", null=True, blank=True)
-    activity_type = models.CharField(max_length=30, choices=ActivityType.choices, null=False, blank=False)
-    stage = models.CharField(max_length=20, choices=PipelineStage.choices, null=False, blank=False)
-
-    product = models.ForeignKey(
-        Product,
-        on_delete=models.CASCADE,
-        null=False,
-        blank=False,
-        related_name='notifications',
-    )
-    created_by = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        null=False,
-        blank=False,
-        related_name='activity_scripts',
     )

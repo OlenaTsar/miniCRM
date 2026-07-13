@@ -5,13 +5,13 @@ from .models import Company, Contact, Deal, Activity, ActivityScript
 class ContactFilter(django_filters.FilterSet):
     class Meta:
         model = Contact
-        fields = ["city", "assigned_to", "status", "company", "lead_source"]
+        fields = ["city", "created_by", "status", "company", "lead_source"]
 
 
 class CompanyFilter(django_filters.FilterSet):
     class Meta:
         model = Company
-        fields = ["industry", "assigned_to"]
+        fields = ["industry", "created_by"]
 
 
 class DealFilter(django_filters.FilterSet):

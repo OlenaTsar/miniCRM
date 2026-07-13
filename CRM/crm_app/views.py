@@ -62,21 +62,8 @@ class CompanyViewSet(ModelViewSet):
         "created_at",
     ]
 
-    def get_queryset(self):
-
-        user = self.request.user
-
-        if user.role == UserRole.ADMIN:
-            return Company.objects.all()
-        if user.role == UserRole.MANAGER:
-            return Company.objects.filter(assigned_to__team=user.team)
-        if user.role == UserRole.SALES_REP:
-            return Company.objects.filter(assigned_to=user)
-
-        return Company.objects.none()
-
     def perform_create(self, serializer):
-        serializer.save(assigned_to=self.request.user)
+        serializer.save(created_by=self.request.user)
 
     @action(detail=True, methods=["post"], url_path="add-contact")
     def add_contact(self, request, pk=None):
@@ -129,21 +116,8 @@ class ContactViewSet(ModelViewSet):
         "created_at",
     ]
 
-    def get_queryset(self):
-
-        user = self.request.user
-
-        if user.role == UserRole.ADMIN:
-            return Contact.objects.all()
-        if user.role == UserRole.MANAGER:
-            return Contact.objects.filter(assigned_to__team=user.team)
-        if user.role == UserRole.SALES_REP:
-            return Contact.objects.filter(assigned_to=user)
-
-        return Contact.objects.none()
-
     def perform_create(self, serializer):
-        serializer.save(assigned_to=self.request.user)
+        serializer.save(created_by=self.request.user)
 
 
 class ContactImportView(APIView):
@@ -156,7 +130,7 @@ class ContactImportView(APIView):
             return Response({"detail": "Файл не надано."}, status=400)
 
         resource = ContactResource()
-        resource.assigned_to = request.user
+        resource.created_by = request.user
 
         dataset = Dataset()
         dataset.load(file.read().decode("utf-8"), format="csv")
@@ -175,23 +149,18 @@ class ContactImportView(APIView):
 
 
 class ContactExportView(APIView):
-    permission_classes = [IsManager]
+    permission_classes = [IsSalesRep]
 
     def get(self, request):
         user = self.request.user
 
         export_format = request.query_params.get("file_format", "csv")
 
-        if user.role == UserRole.ADMIN:
-            queryset = Contact.objects.all()
-        elif user.role == UserRole.MANAGER:
-            queryset = Contact.objects.filter(assigned_to__team=user.team)
-        else:
-            queryset = Contact.objects.none()
+        queryset = Contact.objects.all()
 
-        assigned_to = request.query_params.get("assigned_to")
-        if assigned_to:
-            queryset = queryset.filter(assigned_to=assigned_to)
+        created_by = request.query_params.get("created_by")
+        if created_by:
+            queryset = queryset.filter(created_by=created_by)
 
         status = request.query_params.get("status")
         if status:
@@ -248,6 +217,12 @@ class PipelineViewSet(ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(assigned_to=self.request.user)
 
+    def perform_update(self, serializer):
+        # для передавання _changed_by у signal (ActivityLog)
+        # потрібно при зміні assigned_to
+        serializer.instance._changed_by = self.request.user
+        serializer.save()
+
 
 class DealViewSet(ModelViewSet):
     serializer_class = DealSerializer
@@ -285,6 +260,12 @@ class DealViewSet(ModelViewSet):
         product = Pipeline.objects.get(id=pipeline_id).product
 
         serializer.save(assigned_to=self.request.user, product=product)
+
+    def perform_update(self, serializer):
+        # для передавання _changed_by у signal (ActivityLog)
+        # потрібно при зміні assigned_to
+        serializer.instance._changed_by = self.request.user
+        serializer.save()
 
     @action(detail=True, methods=["post"], url_path="change-stage")
     def change_stage(self, request, pk=None):
@@ -353,24 +334,6 @@ class DealViewSet(ModelViewSet):
         serializer = DealStageHistorySerializer(history, many=True)
         return Response(serializer.data)
 
-    @action(detail=True, methods=["post"], url_path="add-contact")
-    def add_contact(self, request, pk=None):
-        deal = self.get_object()
-        contact_id = request.data.get("contact")
-        contact = get_object_or_404(Contact, id=contact_id)
-
-        deal.contacts.add(contact)
-        return Response({"detail": "Контакт додано."})
-
-    @action(detail=True, methods=["post"], url_path="remove-contact")
-    def remove_contact(self, request, pk=None):
-        deal = self.get_object()
-        contact_id = request.data.get("contact")
-        contact = get_object_or_404(Contact, id=contact_id)
-
-        deal.contacts.remove(contact)
-        return Response({"detail": "Контакт видалено."})
-
 
 class ActivityViewSet(ModelViewSet):
     serializer_class = ActivitySerializer
@@ -404,6 +367,12 @@ class ActivityViewSet(ModelViewSet):
         return Activity.objects.none()
 
     def perform_create(self, serializer):
+        # автоматичне заповнення поля contact, відповідно до deal
+        deal_id = self.request.data.get("deal")
+        # не перевіряю чи deal_id існує, бо помилка повернеться швидше
+        deal = Deal.objects.get(id=deal_id)
+        contact = deal.contact
+
         # дозволяє Manager і Admin вказувати assigned_to при створенні
         assigned_to_id = self.request.data.get("assigned_to")
         user = self.request.user
@@ -411,19 +380,19 @@ class ActivityViewSet(ModelViewSet):
         if assigned_to_id:
             assigned_to = User.objects.get(id=assigned_to_id)
             if user.role == UserRole.ADMIN:
-                serializer.save(assigned_to=assigned_to)
+                serializer.save(assigned_to=assigned_to, contact=contact)
             elif user.team == assigned_to.team:
                 # Manager може створити активність тільки для Sales Rep своєї команди
-                serializer.save(assigned_to=assigned_to)
+                serializer.save(assigned_to=assigned_to, contact=contact)
             else:
                 raise PermissionDenied("You can create activities only for members of your own team.")
 
         else:
             # якщо не вказано assigned_to при створенні
-            serializer.save(assigned_to=user)
+            serializer.save(assigned_to=user, contact=contact)
 
     def perform_update(self, serializer):
-        # для передавання _changed_by у signal
+        # для передавання _changed_by у signal (ActivityLog)
         serializer.instance._changed_by = self.request.user
         serializer.save()
 
@@ -506,30 +475,6 @@ class ActivityScriptViewSet(ModelViewSet):
         "product",
     ]
 
-    def get_queryset(self):
-
-        user = self.request.user
-
-        if user.role == UserRole.ADMIN:
-            return ActivityScript.objects.all()
-
-        if user.role == UserRole.MANAGER:
-            # всі, які створили адміни, і команда менеджера
-            return ActivityScript.objects.filter(
-                Q(created_by__role=UserRole.ADMIN) |
-                Q(created_by__team=user.team)
-            ).distinct()
-
-        if user.role == UserRole.SALES_REP:
-            # всі, які створили адміни, менеджер команди, до якої належить Sales, і ті, які створив сам Sales
-            return ActivityScript.objects.filter(
-                Q(created_by__role=UserRole.ADMIN) |
-                Q(created_by__team=user.team, created_by__role=UserRole.MANAGER) |
-                Q(created_by=user)
-            ).distinct()
-
-        return ActivityScript.objects.none()
-
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
@@ -541,19 +486,11 @@ class ContactReportView(APIView):
         user = self.request.user
 
         export_format = request.query_params.get("file_format", "csv")
+        queryset = Contact.objects.all()
 
-        if user.role == UserRole.ADMIN:
-            queryset = Contact.objects.all()
-        elif user.role == UserRole.MANAGER:
-            queryset = Contact.objects.filter(assigned_to__team=user.team)
-        elif user.role == UserRole.SALES_REP:
-            queryset = Contact.objects.filter(assigned_to=user)
-        else:
-            queryset = Contact.objects.none()
-
-        assigned_to = request.query_params.get("assigned_to")
-        if assigned_to:
-            queryset = queryset.filter(assigned_to=assigned_to)
+        created_by = request.query_params.get("created_by")
+        if created_by:
+            queryset = queryset.filter(created_by=created_by)
 
         status = request.query_params.get("status")
         if status:

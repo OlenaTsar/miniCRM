@@ -33,13 +33,15 @@ class CompanySerializer(serializers.ModelSerializer):
             'facebook_url',
             'created_at',
             'contacts',
-            'assigned_to',
+            'created_by',
+            'deals',
         ]
         read_only_fields = [
             'id',
             'created_at',
             'contacts',
-            'assigned_to',
+            'created_by',
+            'deals',
         ]
 
 
@@ -59,14 +61,14 @@ class ContactSerializer(serializers.ModelSerializer):
             'status',
             'lead_source',
             'company',
-            'assigned_to',
+            'created_by',
             'activities',
             'deals',
         ]
         read_only_fields = [
             'id',
             'created_at',
-            'assigned_to',
+            'created_by',
             'activities',
             'deals',
         ]
@@ -104,10 +106,12 @@ class PipelineSerializer(serializers.ModelSerializer):
             'created_at',
             'assigned_to',
             'product',
+            'deals',
         ]
         read_only_fields = [
             'id',
             'created_at',
+            'deals',
         ]
 
     def get_fields(self):
@@ -150,7 +154,7 @@ class DealSerializer(serializers.ModelSerializer):
             'closed_at',
             'pipeline',
             'product',
-            'contacts',
+            'contact',
             'company',
             'assigned_to',
             'activities',
@@ -163,20 +167,31 @@ class DealSerializer(serializers.ModelSerializer):
             'status',
             'closed_at',
             'activities',
-            'contacts',
         ]
+
+    def get_fields(self):
+        # щоб не можливо було змінити поля після створення
+        fields = super().get_fields()
+        if self.instance is not None:
+            fields["contact"].read_only = True
+        return fields
 
     def validate(self, attrs):
         # забороняє SALES_REP змінювати assigned_to
 
         user = self.context["request"].user
 
-        if (
-                user.role == UserRole.SALES_REP
-                and "assigned_to" in attrs
-        ):
+        if user.role == UserRole.SALES_REP and "assigned_to" in attrs:
             raise serializers.ValidationError(
                 {"assigned_to": "You cannot change assignee."}
+            )
+
+        # якщо змінюється assigned_to
+        # перевірка, чи має новий користувач відповідну pipline, щоб перемістити туди угоду
+        if "assigned_to" in attrs and not attrs["assigned_to"].pipelines.filter(product=self.instance.product).exists():
+            raise serializers.ValidationError(
+                {"assigned_to": f"User {attrs["assigned_to"].email} do not have a "
+                                f"Pipeline with Product {self.instance.product.name}."}
             )
 
         return attrs
@@ -214,13 +229,17 @@ class ActivitySerializer(serializers.ModelSerializer):
             'due_date',
             'completed_at',
             'assigned_to',
-            'contact',
             'deal',
+            'contact',
+            'script',
+            'notification',
         ]
         read_only_fields = [
             'id',
+            'contact',
             'created_at',
             'completed_at',
+            'notification',
         ]
 
     def get_fields(self):
@@ -228,7 +247,7 @@ class ActivitySerializer(serializers.ModelSerializer):
         fields = super().get_fields()
         if self.instance is not None:
             fields["deal"].read_only = True
-            fields["contact"].read_only = True
+            fields["assigned_to"].read_only = True
             fields["activity_type"].read_only = True
         return fields
 
@@ -243,16 +262,23 @@ class ActivitySerializer(serializers.ModelSerializer):
                     "You cannot change any fields except outcome in a completed activity."
                 )
 
-        # забороняє SALES_REP змінювати і передавати при створенні assigned_to
+        # забороняє SALES_REP передавати при створенні assigned_to
 
         user = self.context["request"].user
 
-        if (
-                user.role == UserRole.SALES_REP
-                and "assigned_to" in attrs
-        ):
+        if user.role == UserRole.SALES_REP and "assigned_to" in attrs:
             raise serializers.ValidationError(
                 {"assigned_to": "You cannot change assignee."}
+            )
+
+        # перевірка чи deal належить користувачеві, який створює активність, або переданому assigned_to
+        if "assigned_to" in attrs and attrs["deal"].assigned_to != attrs["assigned_to"]:
+            raise serializers.ValidationError(
+                {"deal": f"Deal must be assigned to user {attrs["assigned_to"].email}."}
+            )
+        if "assigned_to" not in attrs and attrs["deal"].assigned_to != user:
+            raise serializers.ValidationError(
+                {"deal": f"Deal must be assigned to you."}
             )
 
         # перевіряємо чи коректний due_date
@@ -313,8 +339,10 @@ class ActivityScriptSerializer(serializers.ModelSerializer):
             'stage',
             'product',
             'created_by',
+            'activities',
         ]
         read_only_fields = [
             'id',
             'created_by',
+            'activities',
         ]
