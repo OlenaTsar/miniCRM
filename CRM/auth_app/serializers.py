@@ -21,13 +21,6 @@ class RegisterSerializer(serializers.ModelSerializer):
         return User.objects.create_user(**validated_data)
 
 
-# class UserSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = User
-#         fields = ["id", "email", "first_name", "last_name", "role", "is_active", "is_verified"]
-#         read_only_fields = ["id", "is_active", "role", "is_verified"]
-
-
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         try:
