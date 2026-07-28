@@ -24,6 +24,11 @@ def sales_rep_user():
 
 
 @pytest.fixture
+def employee_user():
+    return UserFactory(role="employee", is_verified=True, is_active=True)
+
+
+@pytest.fixture
 def admin_client(api_client, admin_user):
     api_client.force_authenticate(user=admin_user)
     return api_client
@@ -35,6 +40,19 @@ def manager_client(api_client, manager_user):
     return api_client
 
 
+@pytest.fixture
+def sales_rep_client(api_client, sales_rep_user):
+    api_client.force_authenticate(user=sales_rep_user)
+    return api_client
+
+
+@pytest.fixture
+def employee_client(api_client, employee_user):
+    api_client.force_authenticate(user=employee_user)
+    return api_client
+
+
 @pytest.fixture(autouse=True)
+# ігнорування Celery tasks
 def celery_eager(settings):
     settings.CELERY_TASK_ALWAYS_EAGER = True

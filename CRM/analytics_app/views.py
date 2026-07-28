@@ -1,7 +1,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 
-from .permissions import IsSalesRep, IsAdmin, IsManager
+from CRM.permissions import IsSalesRep, IsAdmin, IsManager
 from .services.deals import DealAnalyticsService, DealByPipelineAnalyticsService, DealByTeamsAnalyticsService
 from .services.activities import (
     ActivityAnalyticsService,

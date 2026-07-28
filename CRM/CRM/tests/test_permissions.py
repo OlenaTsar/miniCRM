@@ -1,7 +1,7 @@
 import pytest
 
-from .factories import UserFactory
-from auth_app.permissions import IsAdmin, IsManager, IsSalesRep, IsEmployee
+from auth_app.tests.factories import UserFactory
+from CRM.permissions import IsAdmin, IsManager, IsSalesRep, IsEmployee
 
 
 @pytest.mark.django_db

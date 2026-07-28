@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from auth_app.models import User, Team
+from auth_app.models import User, Team, UserRole
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -20,9 +20,23 @@ class UserSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             'id',
+            'email',
             'created_at',
             'is_verified',
+            'team',
         ]
+
+    def validate(self, attrs):
+        # забороняє manager змінювати role
+
+        user = self.context["request"].user
+
+        if user.role == UserRole.MANAGER and "role" in attrs:
+            raise serializers.ValidationError(
+                {"role": "You cannot change role."}
+            )
+
+        return attrs
 
 
 class MeSerializer(serializers.ModelSerializer):
@@ -36,12 +50,14 @@ class MeSerializer(serializers.ModelSerializer):
             'avatar',
             'role',
             'team',
+            'created_at',
         ]
         read_only_fields = [
             'id',
             'email',
             'role',
             'team',
+            'created_at',
         ]
 
 

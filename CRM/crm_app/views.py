@@ -11,9 +11,8 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.exceptions import PermissionDenied, MethodNotAllowed
 from tablib import Dataset
-from django.db.models import Q
 
-from .permissions import IsSalesRep, IsManager
+from CRM.permissions import IsSalesRep, IsManager
 from auth_app.models import UserRole, User
 from .models import (
     Company,

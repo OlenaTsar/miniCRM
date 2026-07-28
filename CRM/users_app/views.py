@@ -5,7 +5,7 @@ from rest_framework.viewsets import ModelViewSet
 from rest_framework.generics import get_object_or_404
 from rest_framework.parsers import MultiPartParser, FormParser
 
-from .permissions import IsAdmin, IsManager, IsEmployee
+from CRM.permissions import IsAdmin, IsManager, IsEmployee
 from auth_app.models import User, UserRole, Team
 from crm_app.models import Product, Pipeline
 from .serializers import UserSerializer, MeUpdateSerializer, MeSerializer, TeamSerializer
@@ -36,14 +36,12 @@ class UserViewSet(
 
         if user.role == UserRole.ADMIN:
             return User.objects.all()
+        elif user.role == UserRole.MANAGER:
+            return User.objects.filter(team=user.team)
+        else:
+            return User.objects.none()
 
-        return User.objects.filter(team=user.team)
-
-    @action(
-        detail=False,
-        methods=['get', 'patch'],
-        permission_classes=[IsEmployee]
-    )
+    @action(detail=False, methods=['get', 'patch'], permission_classes=[IsEmployee])
     def me(self, request):
         if request.method == 'GET':
             serializer = MeSerializer(request.user)
@@ -84,8 +82,10 @@ class TeamViewSet(ModelViewSet):
 
         if user.role == UserRole.ADMIN:
             return Team.objects.all()
+        elif user.role == UserRole.MANAGER:
+            return Team.objects.filter(id=user.team.id)
         else:
-            return Team.objects.filter(users__team=user.team, users__role=UserRole.MANAGER)
+            return Team.objects.none()
 
     @action(detail=True, methods=["post"], url_path="add-user")
     def add_user(self, request, pk=None):
@@ -94,10 +94,11 @@ class TeamViewSet(ModelViewSet):
         user_obj = get_object_or_404(User, id=user_id)
 
         if user_obj.team == team:
-            return Response({"detail": "Користувач вже є в цій команді."})
+            return Response({"detail": "Користувач вже є в цій команді."}, status=400)
 
         if user_obj.team is not None:
-            return Response({"detail": f"Користувач вже є в команді {team.name}. Спочатку видаліть користувача з неї"})
+            return Response({"detail": f"Користувач вже є в команді {user_obj.team.name}. "
+                                       f"Спочатку видаліть користувача з неї"}, status=400)
 
         user_obj.team = team
         user_obj.save()
@@ -110,7 +111,7 @@ class TeamViewSet(ModelViewSet):
         user_obj = get_object_or_404(User, id=user_id)
 
         if user_obj.team != team:
-            return Response({"detail": "Користувача немає в цій команді."})
+            return Response({"detail": "Користувача немає в цій команді."}, status=400)
 
         user_obj.team = None
         user_obj.save()
@@ -119,35 +120,37 @@ class TeamViewSet(ModelViewSet):
     @action(detail=True, methods=["post"], url_path="add-product")
     def add_product(self, request, pk=None):
         team = self.get_object()
-        product_name = request.data.get("product")
+        product_id = request.data.get("product")
 
-        if team.products.filter(name=product_name).exists():
-            return Response({"detail": "Команда вже працює з цим продуктом."})
+        if team.products.filter(id=product_id).exists():
+            return Response({"detail": "Команда вже працює з цим продуктом."}, status=400)
 
-        # product name є унікальним, тому шукаємо за ним, а не за id
-        product = get_object_or_404(Product, name=product_name)
+        product = get_object_or_404(Product, id=product_id)
         team.products.add(product)
 
         # створення pipeline для кожного користувача
         for user in team.users.all():
             Pipeline.objects.create(
-                name=product_name,
+                name=product.name,
                 product=product,
                 assigned_to=user,
             )
 
-        return Response({"detail": f"{product_name} додано."})
+        return Response({"detail": f"{product.name} додано."})
 
     @action(detail=True, methods=["post"], url_path="remove-product")
     def remove_product(self, request, pk=None):
         team = self.get_object()
-        product_name = request.data.get("product")
-        product = get_object_or_404(Product, name=product_name)
+        product_id = request.data.get("product")
 
+        if not team.products.filter(id=product_id).exists():
+            return Response({"detail": "Команда не працює з цим продуктом."}, status=400)
+
+        product = get_object_or_404(Product, id=product_id)
         team.products.remove(product)
 
         # видалення pipeline, пов'язаних з цим product, у кожного користувача
-        for pipeline in product.pipelines.all().filter(assigned_to__team=team):
-            pipeline.delete()
+        # for pipeline in product.pipelines.all().filter(assigned_to__team=team):
+        #     pipeline.delete()
 
-        return Response({"detail": f"{product_name} видалено."})
+        return Response({"detail": f"{product.name} видалено."})
