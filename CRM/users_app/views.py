@@ -7,7 +7,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 
 from CRM.permissions import IsAdmin, IsManager, IsEmployee
 from auth_app.models import User, UserRole, Team
-from crm_app.models import Product, Pipeline, ArchivingType
+from crm_app.models import Product, Pipeline, ArchivingType, Deal, Activity
 from crm_app.tasks import create_archiving
 from .serializers import UserSerializer, MeUpdateSerializer, MeSerializer, TeamSerializer
 
@@ -176,8 +176,16 @@ class TeamViewSet(ModelViewSet):
         pipelines = product.pipelines.filter(assigned_to__team=team)
 
         pipeline_ids = list(pipelines.values_list("id", flat=True))
-        deal_ids = list(pipelines.deals.values_list("id", flat=True))
-        activity_ids = list(pipelines.deals.activities.values_list("id", flat=True))
+        deal_ids = list(
+            Deal.objects.filter(
+                pipeline__in=pipelines
+            ).values_list("id", flat=True)
+        )
+        activity_ids = list(
+            Activity.objects.filter(
+                deal_id__in=deal_ids
+            ).values_list("id", flat=True)
+        )
 
         create_archiving.delay(
             archiving_type=ArchivingType.PRODUCT_REMOVED_FROM_TEAM,

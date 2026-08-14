@@ -1,8 +1,14 @@
 import pytest
 
 from auth_app.tests.factories import TeamFactory, UserFactory
-from crm_app.tests.factories import ProductFactory
+from crm_app.tests.factories import (
+    ProductFactory,
+    PipelineFactory,
+    DealFactory,
+    ActivityFactory,
+)
 from auth_app.models import Team
+from crm_app.models import ArchivingType
 
 
 @pytest.mark.django_db
@@ -200,6 +206,29 @@ class TestTeamsEndpoint:
         assert res.status_code == 204
         assert not Team.objects.filter(id=team.id).exists()
 
+    def test_all_team_users_data_is_archived_when_team_is_deleted(self, admin_client):
+
+        team = TeamFactory()
+        user = UserFactory(team=team)
+        pipeline = PipelineFactory(assigned_to=user)
+        deal = DealFactory(pipeline=pipeline, assigned_to=user)
+        activity = ActivityFactory(deal=deal, assigned_to=user)
+
+        res = admin_client.delete(f"/api/teams/{team.id}/")
+
+        pipeline.refresh_from_db()
+        assert pipeline.archived is not None
+        deal.refresh_from_db()
+        assert deal.archived is not None
+        activity.refresh_from_db()
+        assert activity.archived is not None
+
+        # додаткова перевірка, що всі дані є в одній архівації
+        assert pipeline.archived == deal.archived == activity.archived
+
+        # перевірка типу архівації
+        assert pipeline.archived.archiving_type == ArchivingType.TEAM_DELETED
+
     def test_manager_cannot_delete_team(self, manager_client):
         team = TeamFactory()
         res = manager_client.delete(f"/api/teams/{team.id}/")
@@ -227,6 +256,21 @@ class TestTeamsAddUserEndpoint:
         # перевірка, чи дійсно user було додано до team
         user.refresh_from_db()
         assert user.team == team
+
+    def test_pipeline_is_created_when_user_is_added_to_team(self, admin_client):
+        # чи створюються pipeline для user під product, з якими вже працює team, до якої було додано user
+        team = TeamFactory()
+        user = UserFactory(team=None)
+        product1 = ProductFactory()
+        product2 = ProductFactory()
+        team.products.add(product1, product2)
+
+        res = admin_client.post(f"/api/teams/{team.id}/add-user/", data={"user": str(user.id)}, format="json")
+
+        user.refresh_from_db()
+        assert user.pipelines.count() == 2
+        assert user.pipelines.filter(product=product1).exists()
+        assert user.pipelines.filter(product=product2).exists()
 
     def test_add_user_already_in_same_team_fails(self, admin_client):
         team = TeamFactory()
@@ -272,6 +316,28 @@ class TestTeamsRemoveUserEndpoint:
         team.refresh_from_db()
         assert user not in team.users.all()
 
+    def test_user_data_is_archived_when_user_is_removed_from_team(self, admin_client):
+        team = TeamFactory()
+        user = UserFactory(team=team)
+        pipeline = PipelineFactory(assigned_to=user)
+        deal = DealFactory(pipeline=pipeline, assigned_to=user)
+        activity = ActivityFactory(deal=deal, assigned_to=user)
+
+        res = admin_client.post(f"/api/teams/{team.id}/remove-user/", data={"user": str(user.id)}, format="json")
+
+        pipeline.refresh_from_db()
+        assert pipeline.archived is not None
+        deal.refresh_from_db()
+        assert deal.archived is not None
+        activity.refresh_from_db()
+        assert activity.archived is not None
+
+        # додаткова перевірка, що всі дані є в одній архівації
+        assert pipeline.archived == deal.archived == activity.archived
+
+        # перевірка типу архівації
+        assert pipeline.archived.archiving_type == ArchivingType.USER_REMOVED_FROM_TEAM
+
     def test_manager_can_remove_user(self, manager_client, manager_user):
         team = manager_user.team
         user = UserFactory(team=team)
@@ -309,6 +375,25 @@ class TestTeamsAddProductEndpoint:
         assert res.status_code == 200
         team.refresh_from_db()
         assert product in team.products.all()
+
+    def test_pipeline_is_created_for_all_team_users_when_product_is_added(self, admin_client, admin_user):
+        # чи створюються pipeline для усіх users з team під доданий product
+        team = admin_user.team
+        user1 = UserFactory(team=team)
+        user2 = UserFactory(team=team)
+        product = ProductFactory()
+
+        res = admin_client.post(f"/api/teams/{team.id}/add-product/", data={"product": str(product.id)}, format="json")
+
+        admin_user.refresh_from_db()
+        assert admin_user.pipelines.count() == 1
+        assert admin_user.pipelines.filter(product=product).exists()
+        user1.refresh_from_db()
+        assert user1.pipelines.count() == 1
+        assert user1.pipelines.filter(product=product).exists()
+        user2.refresh_from_db()
+        assert user2.pipelines.count() == 1
+        assert user2.pipelines.filter(product=product).exists()
 
     def test_manager_can_add_product(self, manager_client, manager_user):
         team = manager_user.team
@@ -362,6 +447,36 @@ class TestTeamsRemoveProductEndpoint:
         assert res.status_code == 200
         team.refresh_from_db()
         assert product not in team.products.all()
+
+    def test_all_team_users_data_is_archived_when_product_is_removed(self, admin_client):
+        # перевіряє, чи архівуються всі дані користувачів команди, які стосувались видаленого продукту
+        team = TeamFactory()
+        product = ProductFactory()
+        team.products.add(product)
+
+        user = UserFactory(team=team)
+        pipeline = PipelineFactory(assigned_to=user, product=product)
+        deal = DealFactory(pipeline=pipeline, assigned_to=user)
+        activity = ActivityFactory(deal=deal, assigned_to=user)
+
+        res = admin_client.post(
+            f"/api/teams/{team.id}/remove-product/",
+            data={"product": str(product.id)},
+            format="json"
+        )
+
+        pipeline.refresh_from_db()
+        assert pipeline.archived is not None
+        deal.refresh_from_db()
+        assert deal.archived is not None
+        activity.refresh_from_db()
+        assert activity.archived is not None
+
+        # додаткова перевірка, що всі дані є в одній архівації
+        assert pipeline.archived == deal.archived == activity.archived
+
+        # перевірка типу архівації
+        assert pipeline.archived.archiving_type == ArchivingType.PRODUCT_REMOVED_FROM_TEAM
 
     def test_manager_can_remove_product(self, manager_client, manager_user):
         team = manager_user.team

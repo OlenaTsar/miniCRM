@@ -86,7 +86,7 @@ def send_data_archiving_notification(user_id, archive_id):
 def create_archiving(archiving_type, pipeline_ids=None, deal_ids=None, activity_ids=None, message=True):
     # створює архівацію і додає до неї pipelines, deals, activities
 
-    archive = Archive.object.create(archiving_type=archiving_type)
+    archive = Archive.objects.create(archiving_type=archiving_type)
 
     if pipeline_ids is not None:
         Pipeline.objects.filter(id__in=pipeline_ids, archived__isnull=True).update(archived=archive)

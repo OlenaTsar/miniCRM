@@ -202,9 +202,11 @@ def log_activity_create(sender, instance, created, **kwargs):
         if isinstance(value, uuid.UUID):
             new_data[key] = str(value)
 
+    performed_by = getattr(instance, "_changed_by", None)
+
     ActivityLog.objects.create(
         activity=instance,
-        performed_by=instance._changed_by,
+        performed_by=performed_by,
         action=ActivityLog.Action.CREATED,
         new_data=dict(new_data),  # конвертуємо в dict, щоб зберегти в форматі JSON
     )

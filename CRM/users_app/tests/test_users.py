@@ -6,6 +6,12 @@ import io
 from auth_app.tests.factories import UserFactory
 from auth_app.models import User
 from django.utils.dateparse import parse_datetime
+from crm_app.tests.factories import (
+    PipelineFactory,
+    DealFactory,
+    ActivityFactory,
+)
+from crm_app.models import ArchivingType
 
 
 def create_test_image():
@@ -290,6 +296,27 @@ class TestUsersEndpoint:
         user = UserFactory()
         admin_client.delete(f"/api/users/{user.id}/")
         assert not User.objects.filter(id=user.id).exists()
+
+    def test_all_user_data_is_archived_when_user_is_deleted(self, admin_client):
+        user = UserFactory()
+        pipeline = PipelineFactory(assigned_to=user)
+        deal = DealFactory(pipeline=pipeline, assigned_to=user)
+        activity = ActivityFactory(deal=deal, assigned_to=user)
+
+        admin_client.delete(f"/api/users/{user.id}/")
+
+        pipeline.refresh_from_db()
+        assert pipeline.archived is not None
+        deal.refresh_from_db()
+        assert deal.archived is not None
+        activity.refresh_from_db()
+        assert activity.archived is not None
+
+        # додаткова перевірка, що всі дані є в одній архівації
+        assert pipeline.archived == deal.archived == activity.archived
+
+        # перевірка типу архівації
+        assert pipeline.archived.archiving_type == ArchivingType.USER_DELETED
 
     # /api/users/me/
     # GET
