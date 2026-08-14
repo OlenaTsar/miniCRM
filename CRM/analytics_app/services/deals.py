@@ -30,6 +30,11 @@ class AnalyticsService:
     def _get_deals(self):
         queryset = Deal.objects.filter(assigned_to__in=self.visible_users)
 
+        # include archived
+        include_archived = self.request.query_params.get("include_archived", "false")
+        if include_archived.lower() != "true":
+            queryset = queryset.filter(archived__isnull=True)
+
         return DealFilter(
             self.request.GET,
             queryset=queryset,
@@ -169,7 +174,14 @@ class DealByPipelineAnalyticsService(AnalyticsService):
         self.pipelines = self._get_pipelines()
 
     def _get_pipelines(self):
-        return Pipeline.objects.filter(assigned_to__in=self.visible_users)
+        queryset = Pipeline.objects.filter(assigned_to__in=self.visible_users)
+
+        # include archived
+        include_archived = self.request.query_params.get("include_archived", "false")
+        if include_archived.lower() != "true":
+            queryset = queryset.filter(archived__isnull=True)
+
+        return queryset
 
     def get_data(self):
         result = []
@@ -193,12 +205,17 @@ class DealByTeamsAnalyticsService:
         self.teams = Team.objects.all()
 
     def _get_deals(self):
-        # для фільтрації угод, якщо при запиті були використані фільтри
+        queryset = Deal.objects.all()
 
-        return DealFilter(
-            self.request.GET,
-            queryset=Deal.objects.all(),
-        ).qs
+        # include archived
+        include_archived = self.request.query_params.get("include_archived", "false")
+        if include_archived.lower() != "true":
+            queryset = queryset.filter(archived__isnull=True)
+
+        # для фільтрації угод, якщо при запиті були використані фільтри
+        queryset = DealFilter(self.request.GET, queryset=queryset,).qs
+
+        return queryset
 
     def get_data(self):
         result = []

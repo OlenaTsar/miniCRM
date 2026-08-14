@@ -1,6 +1,5 @@
 from django.db.models import Avg, F, ExpressionWrapper, DurationField
 from django.utils import timezone
-from dateutil.relativedelta import relativedelta
 
 from auth_app.models import UserRole, User, Team
 from crm_app.models import (
@@ -14,15 +13,37 @@ class TeamAnalyticsService:
     def __init__(self, request):
         self.request = request
         self.teams = Team.objects.all()
+        self.deals = self._get_deals()
+        self.activities = self._get_activities()
+
+    def _get_deals(self):
+        queryset = Deal.objects.all()
+
+        # include archived
+        include_archived = self.request.query_params.get("include_archived", "false")
+        if include_archived.lower() != "true":
+            queryset = queryset.filter(archived__isnull=True)
+
+        return queryset
+
+    def _get_activities(self):
+        queryset = Activity.objects.all()
+
+        # include archived
+        include_archived = self.request.query_params.get("include_archived", "false")
+        if include_archived.lower() != "true":
+            queryset = queryset.filter(archived__isnull=True)
+
+        return queryset
 
     def get_total_deals(self, team):
-        return Deal.objects.filter(assigned_to__team=team).count()
+        return self.deals.filter(assigned_to__team=team).count()
 
     def get_total_won_deals(self, team):
-        return Deal.objects.filter(stage=PipelineStage.CLOSED_WON, assigned_to__team=team).count()
+        return self.deals.filter(stage=PipelineStage.CLOSED_WON, assigned_to__team=team).count()
 
     def get_amount_average_won_deals(self, team):
-        amount_average = Deal.objects.filter(
+        amount_average = self.deals.filter(
             stage=PipelineStage.CLOSED_WON,
             assigned_to__team=team,
         ).aggregate(
@@ -31,13 +52,13 @@ class TeamAnalyticsService:
         return round(amount_average, 2) if amount_average is not None else None
 
     def get_completed_activities(self, team):
-        return Activity.objects.filter(
+        return self.activities.filter(
             assigned_to__team=team,
             completed_at__isnull=False,
         ).count()
 
     def get_overdue_activities(self, team):
-        return Activity.objects.filter(
+        return self.activities.filter(
             assigned_to__team=team,
             completed_at__isnull=True,
             due_date__lt=timezone.now(),
@@ -45,11 +66,11 @@ class TeamAnalyticsService:
 
     def get_avg_activities_per_won_deal(self, team):
         # Скільки в середньому потрібно activity для успішної угоди
-        activity_count = Activity.objects.filter(
+        activity_count = self.activities.filter(
             deal__stage=PipelineStage.CLOSED_WON,
             assigned_to__team=team,
         ).count()
-        deal_count = Deal.objects.filter(
+        deal_count = self.deals.filter(
             stage=PipelineStage.CLOSED_WON,
             assigned_to__team=team,
         ).count()
@@ -59,7 +80,7 @@ class TeamAnalyticsService:
     def get_average_deal_duration(self, team):
         # середній час закриття угоди
         duration = (
-            Deal.objects.filter(
+            self.deals.filter(
                 assigned_to__team=team,
             ).annotate(
                 duration=ExpressionWrapper(

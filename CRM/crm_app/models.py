@@ -4,6 +4,31 @@ import uuid
 from auth_app.models import User, Team
 
 
+class ArchivingType(models.TextChoices):
+    MANUAL = "manual", "Manual"
+    PERIODIC = "periodic", "Periodic"
+    USER_DELETED = "user_deleted", "User deleted"
+    TEAM_DELETED = "team_deleted", "Team Deleted"
+    USER_REMOVED_FROM_TEAM = "user_removed_from_team", "User removed from team"
+    PRODUCT_REMOVED_FROM_TEAM = "product_removed_from_team", "Product removed from team"
+    PRODUCT_DELETED = "product_deleted", "Product deleted"
+
+
+class Archive(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    archiving_type = models.CharField(max_length=50, choices=ArchivingType.choices, default=ArchivingType.MANUAL)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    archived_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        default=None,
+        null=True,
+        blank=True,
+        related_name='archived',
+    )
+
+
 class Company(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255, null=False, blank=False)
@@ -103,9 +128,17 @@ class Pipeline(models.Model):
     )
     product = models.ForeignKey(
         Product,
-        on_delete=models.CASCADE,
-        null=False,
+        on_delete=models.SET_NULL,
+        null=True,
         blank=False,
+        related_name='pipelines',
+    )
+    archived = models.ForeignKey(
+        Archive,
+        on_delete=models.SET_NULL,
+        default=None,
+        null=True,
+        blank=True,
         related_name='pipelines',
     )
 
@@ -153,8 +186,8 @@ class Deal(models.Model):
     )
     product = models.ForeignKey(
         Product,
-        on_delete=models.CASCADE,
-        null=False,
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
         related_name='deals',
     )
@@ -175,6 +208,14 @@ class Deal(models.Model):
     )
     assigned_to = models.ForeignKey(
         User,
+        on_delete=models.SET_NULL,
+        default=None,
+        null=True,
+        blank=True,
+        related_name='deals',
+    )
+    archived = models.ForeignKey(
+        Archive,
         on_delete=models.SET_NULL,
         default=None,
         null=True,
@@ -226,15 +267,15 @@ class ActivityScript(models.Model):
 
     product = models.ForeignKey(
         Product,
-        on_delete=models.CASCADE,
-        null=False,
+        on_delete=models.SET_NULL,
+        null=True,
         blank=False,
         related_name='notifications',
     )
     created_by = models.ForeignKey(
         User,
-        on_delete=models.CASCADE,
-        null=False,
+        on_delete=models.SET_NULL,
+        null=True,
         blank=False,
         related_name='activity_scripts',
     )
@@ -252,8 +293,8 @@ class Activity(models.Model):
 
     assigned_to = models.ForeignKey(
         User,
-        on_delete=models.CASCADE,
-        null=False,
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
         related_name='activities',
     )
@@ -277,6 +318,14 @@ class Activity(models.Model):
         blank=True,
         on_delete=models.SET_NULL,
         related_name="activities",
+    )
+    archived = models.ForeignKey(
+        Archive,
+        on_delete=models.SET_NULL,
+        default=None,
+        null=True,
+        blank=True,
+        related_name='activities',
     )
 
 

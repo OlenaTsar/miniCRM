@@ -1,5 +1,6 @@
 from django.http import HttpResponse
 from django.utils import timezone
+from datetime import timedelta
 from rest_framework import status
 from rest_framework.generics import get_object_or_404
 from rest_framework.views import APIView
@@ -11,6 +12,8 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.exceptions import PermissionDenied, MethodNotAllowed
 from tablib import Dataset
+from rest_framework import mixins, viewsets
+from django.db.models import Q, Prefetch
 
 from CRM.permissions import IsSalesRep, IsManager
 from auth_app.models import UserRole, User
@@ -25,6 +28,7 @@ from .models import (
     Activity,
     Notification,
     ActivityScript,
+    Archive,
 )
 from .serializers import (
     CompanySerializer,
@@ -38,14 +42,17 @@ from .serializers import (
     ActivityLogSerializer,
     NotificationSerializer,
     ActivityScriptSerializer,
+    ArchiveSerializer,
 )
-from .filters import ContactFilter, CompanyFilter, DealFilter, ActivityFilter, ActivityScriptFilter
+from .filters import ContactFilter, CompanyFilter, DealFilter, ActivityFilter, ActivityScriptFilter, ArchiveFilter
 from .resources import ContactResource, ContactReportResource, DealReportResource, ActivityReportResource
+from .tasks import send_data_archiving_notification
 
 
 class CompanyViewSet(ModelViewSet):
     serializer_class = CompanySerializer
     permission_classes = [IsSalesRep]
+    queryset = Company.objects.all()
 
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_class = CompanyFilter
@@ -71,10 +78,10 @@ class CompanyViewSet(ModelViewSet):
         contact_obj = get_object_or_404(Contact, id=contact_id)
 
         if contact_obj.company == company:
-            return Response({"detail": "Контакт вже доданий до цієї компанії."})
+            return Response({"detail": "Контакт вже доданий до цієї компанії."}, status=400)
 
         if contact_obj.company is not None:
-            return Response({"detail": "Контакт вже доданий до іншої компанії."})
+            return Response({"detail": "Контакт вже доданий до іншої компанії."}, status=400)
 
         contact_obj.company = company
         contact_obj.save()
@@ -87,7 +94,7 @@ class CompanyViewSet(ModelViewSet):
         contact_obj = get_object_or_404(Contact, id=contact_id)
 
         if contact_obj.company != company:
-            return Response({"detail": "Контакт не належить до цієї компанії."})
+            return Response({"detail": "Контакт не належить до цієї компанії."}, status=400)
 
         contact_obj.company = None
         contact_obj.save()
@@ -97,6 +104,7 @@ class CompanyViewSet(ModelViewSet):
 class ContactViewSet(ModelViewSet):
     serializer_class = ContactSerializer
     permission_classes = [IsSalesRep]
+    queryset = Contact.objects.all()
 
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_class = ContactFilter
@@ -203,13 +211,23 @@ class PipelineViewSet(ModelViewSet):
     def get_queryset(self):
 
         user = self.request.user
+        display_archived = self.request.query_params.get("display_archived", "false")
 
         if user.role == UserRole.ADMIN:
-            return Pipeline.objects.all()
+            queryset = Pipeline.objects.all()
+            if display_archived.lower() != "true":
+                queryset = queryset.filter(archived__isnull=True)
+            return queryset
         if user.role == UserRole.MANAGER:
-            return Pipeline.objects.filter(assigned_to__team=user.team)
+            queryset = Pipeline.objects.filter(assigned_to__team=user.team)
+            if display_archived.lower() != "true":
+                queryset = queryset.filter(archived__isnull=True)
+            return queryset
         if user.role == UserRole.SALES_REP:
-            return Pipeline.objects.filter(assigned_to=user)
+            queryset = Pipeline.objects.filter(assigned_to=user)
+            if display_archived.lower() != "true":
+                queryset = queryset.filter(archived__isnull=True)
+            return queryset
 
         return Pipeline.objects.none()
 
@@ -243,13 +261,23 @@ class DealViewSet(ModelViewSet):
     def get_queryset(self):
 
         user = self.request.user
+        display_archived = self.request.query_params.get("display_archived", "false")
 
         if user.role == UserRole.ADMIN:
-            return Deal.objects.all()
+            queryset = Deal.objects.all()
+            if display_archived.lower() != "true":
+                queryset = queryset.filter(archived__isnull=True)
+            return queryset
         if user.role == UserRole.MANAGER:
-            return Deal.objects.filter(assigned_to__team=user.team)
+            queryset = Deal.objects.filter(assigned_to__team=user.team)
+            if display_archived.lower() != "true":
+                queryset = queryset.filter(archived__isnull=True)
+            return queryset
         if user.role == UserRole.SALES_REP:
-            return Deal.objects.filter(assigned_to=user)
+            queryset = Deal.objects.filter(assigned_to=user)
+            if display_archived.lower() != "true":
+                queryset = queryset.filter(archived__isnull=True)
+            return queryset
 
         return Deal.objects.none()
 
@@ -314,12 +342,34 @@ class DealViewSet(ModelViewSet):
             return Response({"detail": "Неможливо змінити статус завершеної угоди."}, status=400)
 
         if deal.status == DealStatus.ON_HOLD:
+            # якщо угода була на паузі - знімаємо з паузи
             if deal.stage == PipelineStage.NEW_LEAD:
                 deal.status = DealStatus.NEW
             else:
                 deal.status = DealStatus.IN_PROGRESS
+
+            # відновлюємо сповіщення по угоді
+            # якщо активність не завершена і не є простроченою
+            now = timezone.now()
+            for activity in deal.activities.filter(completed_at__isnull=True, due_date__gt=now + timedelta(minutes=1)):
+                if activity.due_date <= now + timedelta(hours=1):
+                    notify_at = now + timedelta(minutes=1)
+                else:
+                    notify_at = activity.due_date - timedelta(hours=1)
+
+                Notification.objects.create(
+                    notify_at=notify_at,
+                    recipient=activity.assigned_to,
+                    activity=activity
+                )
         else:
+            # якщо угода була активною - ставимо на паузу
             deal.status = DealStatus.ON_HOLD
+
+            # скасовуємо сповіщення по угоді, якщо сповіщення ще не було надіслано
+            notifications = Notification.objects.filter(activity__in=deal.activities.all(), sent_at__isnull=True)
+            for notification in notifications:
+                notification.delete()
 
         deal.save()
 
@@ -355,13 +405,23 @@ class ActivityViewSet(ModelViewSet):
     def get_queryset(self):
 
         user = self.request.user
+        display_archived = self.request.query_params.get("display_archived", "false")
 
         if user.role == UserRole.ADMIN:
-            return Activity.objects.all()
+            queryset = Activity.objects.all()
+            if display_archived.lower() != "true":
+                queryset = queryset.filter(archived__isnull=True)
+            return queryset
         if user.role == UserRole.MANAGER:
-            return Activity.objects.filter(assigned_to__team=user.team)
+            queryset = Activity.objects.filter(assigned_to__team=user.team)
+            if display_archived.lower() != "true":
+                queryset = queryset.filter(archived__isnull=True)
+            return queryset
         if user.role == UserRole.SALES_REP:
-            return Activity.objects.filter(assigned_to=user)
+            queryset = Activity.objects.filter(assigned_to=user)
+            if display_archived.lower() != "true":
+                queryset = queryset.filter(archived__isnull=True)
+            return queryset
 
         return Activity.objects.none()
 
@@ -454,6 +514,7 @@ class NotificationViewSet(ModelViewSet):
 class ActivityScriptViewSet(ModelViewSet):
     serializer_class = ActivityScriptSerializer
     permission_classes = [IsSalesRep]
+    queryset = ActivityScript.objects.all()
 
     # для attachment
     parser_classes = [MultiPartParser, FormParser]
@@ -600,3 +661,257 @@ class ActivityReportView(APIView):
         response = HttpResponse(content, content_type=content_type)
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         return response
+
+
+class ArchiveViewSet(
+    mixins.ListModelMixin,      # GET /api/archive/
+    mixins.RetrieveModelMixin,  # GET /api/archive/{id}/
+    mixins.DestroyModelMixin,   # DELETE /api/archive/{id}/
+    mixins.CreateModelMixin,    # POST /api/archive/
+    viewsets.GenericViewSet,
+):
+    serializer_class = ArchiveSerializer
+    permission_classes = [IsSalesRep]
+
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_class = ArchiveFilter
+    search_fields = [
+        "archiving_type",
+        'timestamp',
+        'archived_by',
+    ]
+    # sorting
+    ordering_fields = [
+        "archiving_type",
+        'timestamp',
+        'archived_by',
+    ]
+
+    def get_queryset(self):
+
+        user = self.request.user
+
+        if user.role == UserRole.ADMIN:
+            return Archive.objects.all()
+        elif user.role == UserRole.MANAGER:
+            return Archive.objects.filter(
+                Q(deals__assigned_to__team=user.team) |
+                Q(activities__assigned_to__team=user.team) |
+                Q(pipelines__assigned_to__team=user.team)
+            ).prefetch_related(
+                Prefetch(
+                    "deals",
+                    queryset=Deal.objects.filter(assigned_to__team=user.team),
+                ),
+                Prefetch(
+                    "activities",
+                    queryset=Activity.objects.filter(assigned_to__team=user.team),
+                ),
+                Prefetch(
+                    "pipelines",
+                    queryset=Pipeline.objects.filter(assigned_to__team=user.team),
+                ),
+            ).distinct()
+        elif user.role == UserRole.SALES_REP:
+            return Archive.objects.filter(
+                Q(deals__assigned_to=user) |
+                Q(activities__assigned_to=user) |
+                Q(pipelines__assigned_to=user)
+            ).prefetch_related(
+                Prefetch(
+                    "deals",
+                    queryset=Deal.objects.filter(assigned_to=user),
+                ),
+                Prefetch(
+                    "activities",
+                    queryset=Activity.objects.filter(assigned_to=user),
+                ),
+                Prefetch(
+                    "pipelines",
+                    queryset=Pipeline.objects.filter(assigned_to=user),
+                ),
+            ).distinct()
+        else:
+            return Archive.objects.none()
+
+    def perform_create(self, serializer):
+        archive = serializer.save(archived_by=self.request.user)
+
+        # встановлюємо зв'язок з архівом через Pipeline, Deal, Activity
+        pipelines_id = self.request.data.get("pipelines", [])
+        deals_id = self.request.data.get("deals", [])
+        activities_id = self.request.data.get("activities", [])
+
+        if self.request.user.role == UserRole.ADMIN:
+            # перевіряє чи дані не є вже заархівованими
+            pipelines = Pipeline.objects.filter(id__in=pipelines_id, archived__isnull=True)
+            for pipeline in pipelines:
+                pipeline.archived = archive
+                pipeline.save()
+            # спрацює сигнал на архівацію pipelines і всі deals і activities,
+            # що належать цим pipelines будуть також архівовані
+
+            deals = Deal.objects.filter(id__in=deals_id, archived__isnull=True)
+            for deal in deals:
+                deal.archived = archive
+                deal.save()
+            # спрацює сигнал на архівацію deals і всі activities,
+            # що належать цим deals будуть також архівовані
+
+            activities = Activity.objects.filter(id__in=activities_id, archived__isnull=True)
+            for activity in activities:
+                activity.archived = archive
+                activity.save()
+
+        elif self.request.user.role == UserRole.MANAGER:
+            pipelines = Pipeline.objects.filter(
+                id__in=pipelines_id,
+                archived__isnull=True,
+                assigned_to__team=self.request.user.team
+            )
+            for pipeline in pipelines:
+                pipeline.archived = archive
+                pipeline.save()
+
+            deals = Deal.objects.filter(
+                id__in=deals_id,
+                archived__isnull=True,
+                assigned_to__team=self.request.user.team
+            )
+            for deal in deals:
+                deal.archived = archive
+                deal.save()
+
+            activities = Activity.objects.filter(
+                id__in=activities_id,
+                archived__isnull=True,
+                assigned_to__team=self.request.user.team
+            )
+            for activity in activities:
+                activity.archived = archive
+                activity.save()
+
+        elif self.request.user.role == UserRole.SALES_REP:
+            pipelines = Pipeline.objects.filter(
+                id__in=pipelines_id,
+                archived__isnull=True,
+                assigned_to=self.request.user
+            )
+            for pipeline in pipelines:
+                pipeline.archived = archive
+                pipeline.save()
+
+            deals = Deal.objects.filter(
+                id__in=deals_id,
+                archived__isnull=True,
+                assigned_to=self.request.user
+            )
+            for deal in deals:
+                deal.archived = archive
+                deal.save()
+
+            activities = Activity.objects.filter(
+                id__in=activities_id,
+                archived__isnull=True,
+                assigned_to=self.request.user
+            )
+            for activity in activities:
+                activity.archived = archive
+                activity.save()
+
+        # надсилання користувачам сповіщення про архівацію
+        users = User.objects.filter(
+            Q(pipelines__archived=archive) |
+            Q(deals__archived=archive) |
+            Q(activities__archived=archive)
+        ).distinct()
+
+        for user in users:
+            send_data_archiving_notification.delay(str(user.id), str(archive.id))
+
+    @action(detail=False, methods=["post"], url_path="unarchive")
+    def unarchive(self, request, pk=None):
+        # розархівовує дані, які були передані
+
+        pipelines_id = self.request.data.get("pipelines", [])
+        deals_id = self.request.data.get("deals", [])
+        activities_id = self.request.data.get("activities", [])
+
+        if self.request.user.role == UserRole.ADMIN:
+            # перевіряє чи дані є заархівованими
+            pipelines = Pipeline.objects.filter(id__in=pipelines_id, archived__isnull=False)
+            for pipeline in pipelines:
+                pipeline.archived = None
+                pipeline.save()
+            # спрацює сигнал на деархівацію pipelines і всі deals і activities,
+            # що належать цим pipelines, і є з ними в одному архіві, будуть також архівовані
+
+            deals = Deal.objects.filter(id__in=deals_id, archived__isnull=False)
+            for deal in deals:
+                deal.archived = None
+                deal.save()
+            # спрацює сигнал на деархівацію deals і всі activities,
+            # що належать цим deals, і є з ними в одному архіві, будуть також деархівовані
+
+            activities = Activity.objects.filter(id__in=activities_id, archived__isnull=False)
+            for activity in activities:
+                activity.archived = None
+                activity.save()
+
+        elif self.request.user.role == UserRole.MANAGER:
+            pipelines = Pipeline.objects.filter(
+                id__in=pipelines_id,
+                archived__isnull=False,
+                assigned_to__team=self.request.user.team
+            )
+            for pipeline in pipelines:
+                pipeline.archived = None
+                pipeline.save()
+
+            deals = Deal.objects.filter(
+                id__in=deals_id,
+                archived__isnull=False,
+                assigned_to__team=self.request.user.team
+            )
+            for deal in deals:
+                deal.archived = None
+                deal.save()
+
+            activities = Activity.objects.filter(
+                id__in=activities_id,
+                archived__isnull=False,
+                assigned_to__team=self.request.user.team
+            )
+            for activity in activities:
+                activity.archived = None
+                activity.save()
+
+        elif self.request.user.role == UserRole.SALES_REP:
+            pipelines = Pipeline.objects.filter(
+                id__in=pipelines_id,
+                archived__isnull=False,
+                assigned_to=self.request.user
+            )
+            for pipeline in pipelines:
+                pipeline.archived = None
+                pipeline.save()
+
+            deals = Deal.objects.filter(
+                id__in=deals_id,
+                archived__isnull=False,
+                assigned_to=self.request.user
+            )
+            for deal in deals:
+                deal.archived = None
+                deal.save()
+
+            activities = Activity.objects.filter(
+                id__in=activities_id,
+                archived__isnull=False,
+                assigned_to=self.request.user
+            )
+            for activity in activities:
+                activity.archived = None
+                activity.save()
+
+        return Response(status=status.HTTP_204_NO_CONTENT)

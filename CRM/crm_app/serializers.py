@@ -15,6 +15,7 @@ from .models import (
     ActivityLog,
     Notification,
     ActivityScript,
+    Archive,
 )
 from auth_app.models import UserRole
 
@@ -346,3 +347,18 @@ class ActivityScriptSerializer(serializers.ModelSerializer):
             'created_by',
             'activities',
         ]
+
+
+class ArchiveSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Archive
+        fields = [
+            "id",
+            "archiving_type",
+            "timestamp",
+            "archived_by",
+            "deals",
+            "activities",
+            "pipelines",
+        ]
+        read_only_fields = fields

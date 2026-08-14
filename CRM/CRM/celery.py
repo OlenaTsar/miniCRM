@@ -16,3 +16,12 @@ app.conf.beat_schedule = {
         "schedule": crontab(minute="*/1"),  # кожну хвилину
     },
 }
+
+# автоматична архівація першого числа кожного місяця угод та їх активностей,
+# які були завершені станом на перше число попереднього місяця.
+app.conf.beat_schedule = {
+    "monthly_archive_completed_deals_and_activities": {
+        "task": "crm_app.tasks.monthly_archive_completed_deals_and_activities",
+        "schedule": crontab(day_of_month="1", hour="0", minute="0")
+    },
+}

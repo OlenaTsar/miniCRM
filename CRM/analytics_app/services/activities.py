@@ -31,6 +31,11 @@ class AnalyticsService:
     def _get_activities(self):
         queryset = Activity.objects.filter(assigned_to__in=self.visible_users)
 
+        # include archived
+        include_archived = self.request.query_params.get("include_archived", "false")
+        if include_archived.lower() != "true":
+            queryset = queryset.filter(archived__isnull=True)
+
         return ActivityFilter(
             self.request.GET,
             queryset=queryset,
@@ -87,7 +92,14 @@ class ActivityByPipelineAnalyticsService(AnalyticsService):
         self.pipelines = self._get_pipelines()
 
     def _get_pipelines(self):
-        return Pipeline.objects.filter(assigned_to__in=self.visible_users)
+        queryset = Pipeline.objects.filter(assigned_to__in=self.visible_users)
+
+        # include archived
+        include_archived = self.request.query_params.get("include_archived", "false")
+        if include_archived.lower() != "true":
+            queryset = queryset.filter(archived__isnull=True)
+
+        return queryset
 
     def get_data(self):
         result = []
@@ -111,12 +123,17 @@ class ActivityByTeamsAnalyticsService:
         self.teams = Team.objects.all()
 
     def _get_activities(self):
-        # для фільтрації activities, якщо при запиті були використані фільтри
+        queryset = Activity.objects.all()
 
-        return ActivityFilter(
-            self.request.GET,
-            queryset=Activity.objects.all(),
-        ).qs
+        # include archived
+        include_archived = self.request.query_params.get("include_archived", "false")
+        if include_archived.lower() != "true":
+            queryset = queryset.filter(archived__isnull=True)
+
+        # для фільтрації activities, якщо при запиті були використані фільтри
+        queryset = ActivityFilter(self.request.GET, queryset=queryset).qs
+
+        return queryset
 
     def get_data(self):
         result = []

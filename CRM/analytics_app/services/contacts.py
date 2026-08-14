@@ -31,7 +31,7 @@ class AnalyticsService:
             return User.objects.none()
 
     def _get_contacts(self):
-        queryset = Contact.objects.filter(assigned_to__in=self.visible_users)
+        queryset = Contact.objects.filter(created_by__in=self.visible_users)
 
         return ContactFilter(
             self.request.GET,
@@ -82,7 +82,14 @@ class ContactByPipelineAnalyticsService(AnalyticsService):
         self.pipelines = self._get_pipelines()
 
     def _get_pipelines(self):
-        return Pipeline.objects.filter(assigned_to__in=self.visible_users)
+        queryset = Pipeline.objects.filter(assigned_to__in=self.visible_users)
+
+        # include archived
+        include_archived = self.request.query_params.get("include_archived", "false")
+        if include_archived.lower() != "true":
+            queryset = queryset.filter(archived__isnull=True)
+
+        return queryset
 
     def get_data(self):
         result = []
@@ -117,7 +124,7 @@ class ContactByTeamsAnalyticsService:
         result = []
 
         for team in self.teams:
-            team_contacts = self.contacts.filter(assigned_to__team=team)
+            team_contacts = self.contacts.filter(created_by__team=team)
 
             # в команди може бути один менеджер, не бути жодного або бути декілька
             # тому враховуються всі випадки

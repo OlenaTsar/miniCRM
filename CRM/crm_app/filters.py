@@ -1,5 +1,5 @@
 import django_filters
-from .models import Company, Contact, Deal, Activity, ActivityScript
+from .models import Company, Contact, Deal, Activity, ActivityScript, Archive
 
 
 class ContactFilter(django_filters.FilterSet):
@@ -63,4 +63,40 @@ class ActivityScriptFilter(django_filters.FilterSet):
             'stage',
             'product',
             'created_by',
+        ]
+
+
+class ArchiveFilter(django_filters.FilterSet):
+
+    # фільтр для діапазону дат (timestamp_after= timestamp_before=)
+    timestamp = django_filters.DateFromToRangeFilter(field_name="timestamp")
+
+    has_pipelines = django_filters.BooleanFilter(method="filter_has_pipelines")
+    has_deals = django_filters.BooleanFilter(method="filter_has_deals")
+    has_activities = django_filters.BooleanFilter(method="filter_has_activities")
+
+    def filter_has_pipelines(self, queryset, name, value):
+        if value:
+            return queryset.filter(pipelines__isnull=False).distinct()
+        return queryset.filter(pipelines__isnull=True)
+
+    def filter_has_deals(self, queryset, name, value):
+        if value:
+            return queryset.filter(deals__isnull=False).distinct()
+        return queryset.filter(deals__isnull=True)
+
+    def filter_has_activities(self, queryset, name, value):
+        if value:
+            return queryset.filter(activities__isnull=False).distinct()
+        return queryset.filter(activities__isnull=True)
+
+    class Meta:
+        model = Archive
+        fields = [
+            'archiving_type',
+            'timestamp',
+            'archived_by',
+            'has_pipelines',
+            'has_deals',
+            'has_activities',
         ]

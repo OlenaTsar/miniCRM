@@ -15,17 +15,19 @@ from .views import (
     ContactReportView,
     DealReportView,
     ActivityReportView,
+    ArchiveViewSet,
 )
 
 router = DefaultRouter()
-router.register('companies', CompanyViewSet, basename='company')
-router.register('contacts', ContactViewSet, basename='contact')
+router.register('companies', CompanyViewSet, basename='companies')
+router.register('contacts', ContactViewSet, basename='contacts')
 router.register('products', ProductViewSet, basename='products')
 router.register('deals', DealViewSet, basename='deals')
 router.register('pipelines', PipelineViewSet, basename='pipelines')
 router.register('activities', ActivityViewSet, basename='activities')
 router.register('notifications', NotificationViewSet, basename='notifications')
 router.register('activity-scripts', ActivityScriptViewSet, basename='activity-scripts')
+router.register('archive', ArchiveViewSet, basename='archive')
 
 urlpatterns = [
     path("contacts-import/", ContactImportView.as_view()),
