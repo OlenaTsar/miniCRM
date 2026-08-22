@@ -195,9 +195,9 @@ class TestTeamsEndpoint:
         assert res.status_code == 200
 
         team.refresh_from_db()
-        assert team.id != new_data["id"]
-        assert team.users != new_data["users"]
-        assert team.products != new_data["products"]
+        assert str(team.id) != new_data["id"]
+        assert list(str(user.id) for user in team.users.all()) == []
+        assert list(str(product.id) for product in team.products.all()) == []
 
     # delete
     def test_admin_can_delete_team(self, admin_client):
