@@ -304,8 +304,16 @@ def archive_on_product_delete(sender, instance, **kwargs):
     pipelines = instance.pipelines.all()
 
     pipeline_ids = list(pipelines.values_list("id", flat=True))
-    deal_ids = list(pipelines.deals.values_list("id", flat=True))
-    activity_ids = list(pipelines.deals.activities.values_list("id", flat=True))
+    deal_ids = list(
+        Deal.objects.filter(
+            pipeline__in=pipelines
+        ).values_list("id", flat=True)
+    )
+    activity_ids = list(
+        Activity.objects.filter(
+            deal_id__in=deal_ids
+        ).values_list("id", flat=True)
+    )
 
     create_archiving.delay(
         archiving_type=ArchivingType.PRODUCT_DELETED,
