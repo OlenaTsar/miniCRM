@@ -232,7 +232,12 @@ class PipelineViewSet(ModelViewSet):
         return Pipeline.objects.none()
 
     def perform_create(self, serializer):
-        serializer.save(assigned_to=self.request.user)
+        assigned_to = serializer.validated_data.get("assigned_to")
+
+        if assigned_to:
+            serializer.save()
+        else:
+            serializer.save(assigned_to=self.request.user)
 
     def perform_update(self, serializer):
         # для передавання _changed_by у signal (ActivityLog)
@@ -282,11 +287,15 @@ class DealViewSet(ModelViewSet):
         return Deal.objects.none()
 
     def perform_create(self, serializer):
-        # щоб product угоди був такий, як в pipeline, до якої вона належить
-        pipeline_id = self.request.data['pipeline']
-        product = Pipeline.objects.get(id=pipeline_id).product
+        pipeline = serializer.validated_data.get('pipeline')
 
-        serializer.save(assigned_to=self.request.user, product=product)
+        # щоб product угоди був такий, як в pipeline, до якої вона належить
+        product = pipeline.product
+
+        # щоб угода належала користувачеві, якому належить pipeline
+        assigned_to = pipeline.assigned_to
+
+        serializer.save(assigned_to=assigned_to, product=product)
 
     def perform_update(self, serializer):
         # для передавання _changed_by у signal (ActivityLog)

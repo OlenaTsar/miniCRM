@@ -22,7 +22,7 @@ from .tasks import create_archiving
 
 
 @receiver(pre_save, sender=Pipeline)
-def pipeline_change(sender, instance, **kwargs):
+def pipeline_change_assignee(sender, instance, **kwargs):
     if not instance.pk:  # новий об'єкт - пропускаємо
         return
 

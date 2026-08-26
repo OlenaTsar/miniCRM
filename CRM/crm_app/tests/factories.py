@@ -17,6 +17,8 @@ from crm_app.models import (
     DealStatus,
     Currency,
     PipelineStage,
+    Archive,
+    ArchivingType,
 )
 from auth_app.tests.factories import UserFactory
 
@@ -115,3 +117,12 @@ class ActivityFactory(DjangoModelFactory):
     contact = factory.SubFactory(ContactFactory)
     deal = factory.SubFactory(DealFactory)
     script = factory.SubFactory(ActivityScriptFactory)
+
+
+class ArchiveFactory(DjangoModelFactory):
+    class Meta:
+        model = Archive
+
+    archiving_type = ArchivingType.MANUAL
+
+    archived_by = factory.SubFactory(UserFactory)

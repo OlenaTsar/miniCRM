@@ -2,6 +2,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from rest_framework import serializers
+from rest_framework.exceptions import PermissionDenied
 
 from .models import (
     Company,
@@ -124,17 +125,21 @@ class PipelineSerializer(serializers.ModelSerializer):
         return fields
 
     def validate(self, attrs):
-        # забороняє SALES_REP змінювати assigned_to
+        # поле product обов'язкове при створені
+        if self.instance is None and not attrs.get("product"):
+            raise serializers.ValidationError({"product": "This field is required."})
 
         user = self.context["request"].user
+        assigned_to = attrs.get("assigned_to")
 
-        if (
-                user.role == UserRole.SALES_REP
-                and "assigned_to" in attrs
-        ):
-            raise serializers.ValidationError(
-                {"assigned_to": "You cannot change assignee."}
-            )
+        # забороняє SALES_REP змінювати чи встановлювати assigned_to
+        if user.role == UserRole.SALES_REP and assigned_to:
+            raise PermissionDenied("You cannot set or change assignee.")
+
+        # забороняє MANAGER створювати чи призначати pipelines користувачам не зі своєї team
+        if user.role == UserRole.MANAGER and assigned_to:
+            if assigned_to.team != user.team:
+                raise PermissionDenied("You can create pipelines only for members of your own team.")
 
         return attrs
 
@@ -178,22 +183,37 @@ class DealSerializer(serializers.ModelSerializer):
         return fields
 
     def validate(self, attrs):
-        # забороняє SALES_REP змінювати assigned_to
-
         user = self.context["request"].user
 
+        # забороняє SALES_REP змінювати assigned_to
         if user.role == UserRole.SALES_REP and "assigned_to" in attrs:
             raise serializers.ValidationError(
                 {"assigned_to": "You cannot change assignee."}
             )
 
+        # при зміні даних
+        if self.instance is not None:
         # якщо змінюється assigned_to
         # перевірка, чи має новий користувач відповідну pipline, щоб перемістити туди угоду
-        if "assigned_to" in attrs and not attrs["assigned_to"].pipelines.filter(product=self.instance.product).exists():
-            raise serializers.ValidationError(
-                {"assigned_to": f"User {attrs["assigned_to"].email} do not have a "
-                                f"Pipeline with Product {self.instance.product.name}."}
-            )
+            if ("assigned_to" in attrs and
+                    not attrs["assigned_to"].pipelines.filter(product=self.instance.product).exists()):
+                raise serializers.ValidationError(
+                    {"assigned_to": f"User {attrs["assigned_to"].email} do not have a "
+                                    f"Pipeline with Product {self.instance.product.name}."}
+                )
+
+        # при створені deal
+        if self.instance is None:
+            # забороняє SALES_REP створювати угоди для чужих Pipeline
+            if user.role == UserRole.SALES_REP and attrs["pipeline"].assigned_to != user:
+                raise serializers.ValidationError(
+                    {"pipeline": "You can create deals only for your own pipelines."}
+                )
+            # забороняє MANAGER створювати угоди для Pipeline користувачів з інших team
+            if user.role == UserRole.MANAGER and attrs["pipeline"].assigned_to.team != user.team:
+                raise serializers.ValidationError(
+                    {"pipeline": "You can create deals only for your team pipelines."}
+                )
 
         return attrs
 
