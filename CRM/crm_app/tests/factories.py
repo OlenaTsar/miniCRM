@@ -87,7 +87,7 @@ class DealFactory(DjangoModelFactory):
     product = factory.LazyAttribute(lambda obj: obj.pipeline.product)
     contact = factory.SubFactory(ContactFactory)
     company = None
-    assigned_to = factory.SubFactory(UserFactory)
+    assigned_to = factory.LazyAttribute(lambda obj: obj.pipeline.assigned_to)
 
 
 class ActivityScriptFactory(DjangoModelFactory):

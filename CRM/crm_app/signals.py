@@ -150,6 +150,12 @@ def deal_change(sender, instance, **kwargs):
     if old_deal.assigned_to != instance.assigned_to and instance.pipeline.assigned_to != instance.assigned_to:
         instance.pipeline = instance.assigned_to.pipelines.filter(product=instance.product).first()
 
+    # якщо було змінено pipeline угоди, але assigned_to угоди не збігається з assigned_to нового pipeline
+    # (при перенесені угоди в pipeline іншого користувача)
+    # встановлюємо assigned_to такий, як в нового pipeline
+    if old_deal.pipeline != instance.pipeline and instance.pipeline.assigned_to != instance.assigned_to:
+        instance.assigned_to = instance.pipeline.assigned_to
+
 
 @receiver(pre_save, sender=Deal)
 def log_stage_change(sender, instance, **kwargs):

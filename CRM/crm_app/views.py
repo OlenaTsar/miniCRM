@@ -289,7 +289,7 @@ class DealViewSet(ModelViewSet):
     def perform_create(self, serializer):
         pipeline = serializer.validated_data.get('pipeline')
 
-        # щоб product угоди був такий, як в pipeline, до якої вона належить
+        # щоб product угоди був той, що і в pipeline, до якої вона належить
         product = pipeline.product
 
         # щоб угода належала користувачеві, якому належить pipeline

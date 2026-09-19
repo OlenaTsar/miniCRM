@@ -246,6 +246,18 @@ class TestPipelinesEndpoint:
         assert (list(str(deal_id) for deal_id in pipeline_data["deals"]) ==
                 list(str(deal.id) for deal in pipeline.deals.all()))
 
+    def test_retrieve_pipeline_display_archived(self, admin_client):
+        archive = ArchiveFactory()
+        archived_pipeline = PipelineFactory(archived=archive)
+
+        # при звичайному запиті архівований вміст не повертається
+        res = admin_client.get(f"/api/pipelines/{archived_pipeline.id}/")
+        assert res.status_code == 404
+
+        # при display_archived=true архівований вміст повертається
+        res = admin_client.get(f"/api/pipelines/{archived_pipeline.id}/", query_params={"display_archived": "true"})
+        assert res.status_code == 200
+
     # partial_update
     def test_admin_can_update_pipeline(self, admin_client):
         user = UserFactory()

@@ -185,21 +185,63 @@ class DealSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         user = self.context["request"].user
 
-        # забороняє SALES_REP змінювати assigned_to
-        if user.role == UserRole.SALES_REP and "assigned_to" in attrs:
-            raise serializers.ValidationError(
-                {"assigned_to": "You cannot change assignee."}
-            )
-
         # при зміні даних
-        if self.instance is not None:
-        # якщо змінюється assigned_to
-        # перевірка, чи має новий користувач відповідну pipline, щоб перемістити туди угоду
-            if ("assigned_to" in attrs and
-                    not attrs["assigned_to"].pipelines.filter(product=self.instance.product).exists()):
+        # забороняє одночасно змінювати assigned_to і pipeline, якщо pipeline.assigned_to не збігається з assigned_to
+        if (self.instance is not None
+                and "assigned_to" in attrs
+                and "pipeline" in attrs):
+            assigned_to = attrs.get("assigned_to")
+            pipeline = attrs.get("pipeline")
+            if assigned_to != pipeline.assigned_to:
                 raise serializers.ValidationError(
-                    {"assigned_to": f"User {attrs["assigned_to"].email} do not have a "
-                                    f"Pipeline with Product {self.instance.product.name}."}
+                    {"assigned_to": "Deal assignee must match the pipeline assignee."}
+                )
+
+        # якщо змінюється assigned_to
+        if self.instance is not None and "assigned_to" in attrs:
+            assigned_to = attrs.get("assigned_to")
+
+            # забороняє SALES_REP змінювати assigned_to
+            if user.role == UserRole.SALES_REP:
+                raise serializers.ValidationError(
+                    {"assigned_to": "You cannot change assignee."}
+                )
+
+            # забороняє MANAGER призначати deal користувачам не зі своєї team
+            if user.role == UserRole.MANAGER:
+                if assigned_to.team != user.team:
+                    raise PermissionDenied("You can assign deal only for members of your own team.")
+
+            # перевірка, чи має новий користувач відповідну pipline, щоб перемістити туди угоду
+            # pipeline повинна відповідати за той самий product і не бути заархівованою
+            if not attrs["assigned_to"].pipelines.filter(product=self.instance.product, archived=None).exists():
+                raise serializers.ValidationError(
+                    {"assigned_to": f"User {attrs['assigned_to'].email} does not have an active"
+                                    f"Pipeline for Product {self.instance.product.name}."}
+                )
+
+        # якщо змінюється pipeline
+        if self.instance is not None and "pipeline" in attrs:
+            pipeline = attrs.get("pipeline")
+
+            # забороняє SALES_REP переносити угоду не в свою pipeline
+            if user.role == UserRole.SALES_REP and pipeline.assigned_to != user:
+                raise PermissionDenied("You cannot move a deal to another user's pipeline.")
+
+            # забороняє MANAGER переносити deal в pipeline користувача не зі своєї team
+            if user.role == UserRole.MANAGER and pipeline.assigned_to.team != user.team:
+                raise PermissionDenied("You cannot move a deal to another team's pipeline.")
+
+            # перевірка, чи новий pipeline відповідає за той самий продукт
+            if pipeline.product != self.instance.product:
+                raise serializers.ValidationError(
+                    {"pipeline": "Pipeline product must match the deal product."}
+                )
+
+            # перевірка, чи новий pipeline не є архівованим
+            if pipeline.archived is not None:
+                raise serializers.ValidationError(
+                    {"pipeline": "You can not move deal to archived pipeline."}
                 )
 
         # при створені deal
