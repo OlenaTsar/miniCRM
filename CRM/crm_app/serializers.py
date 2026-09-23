@@ -335,14 +335,15 @@ class ActivitySerializer(serializers.ModelSerializer):
             )
 
         # перевірка чи deal належить користувачеві, який створює активність, або переданому assigned_to
-        if "assigned_to" in attrs and attrs["deal"].assigned_to != attrs["assigned_to"]:
-            raise serializers.ValidationError(
-                {"deal": f"Deal must be assigned to user {attrs["assigned_to"].email}."}
-            )
-        if "assigned_to" not in attrs and attrs["deal"].assigned_to != user:
-            raise serializers.ValidationError(
-                {"deal": f"Deal must be assigned to you."}
-            )
+        if not self.instance:
+            if "assigned_to" in attrs and attrs["deal"].assigned_to != attrs["assigned_to"]:
+                raise serializers.ValidationError(
+                    {"deal": f"Deal must be assigned to user {attrs["assigned_to"].email}."}
+                )
+            if "assigned_to" not in attrs and attrs["deal"].assigned_to != user:
+                raise serializers.ValidationError(
+                    {"deal": f"Deal must be assigned to you."}
+                )
 
         # перевіряємо чи коректний due_date
         if "due_date" in attrs and attrs["due_date"] < now + timedelta(minutes=5):

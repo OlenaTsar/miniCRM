@@ -347,7 +347,7 @@ class TestDealsEndpoint:
             "description": "New description",
             "amount": 3600,
             "currency": Currency.EUR,
-            "expected_close_date": "2027-01-01T01:00:00Z",
+            "expected_close_date": timezone.now() + timedelta(days=10),
             "company": CompanyFactory().id,
         }
         res = admin_client.patch(f"/api/deals/{deal.id}/", data=new_data, format="json")
@@ -358,7 +358,7 @@ class TestDealsEndpoint:
         assert new_data["description"] == deal.description
         assert float(new_data["amount"]) == float(deal.amount)
         assert new_data["currency"] == deal.currency
-        assert parse_datetime(new_data["expected_close_date"]) == deal.expected_close_date
+        assert new_data["expected_close_date"] == deal.expected_close_date
         assert new_data["company"] == deal.company.id
 
     def test_admin_can_move_deal_to_another_pipeline_of_same_user(self, admin_client):
@@ -507,7 +507,7 @@ class TestDealsEndpoint:
             "description": "New description",
             "amount": 3600,
             "currency": Currency.EUR,
-            "expected_close_date": "2027-01-01T01:00:00Z",
+            "expected_close_date": timezone.now() + timedelta(days=10),
             "company": CompanyFactory().id,
         }
         res = manager_client.patch(f"/api/deals/{deal.id}/", data=new_data, format="json")
@@ -518,7 +518,7 @@ class TestDealsEndpoint:
         assert new_data["description"] == deal.description
         assert float(new_data["amount"]) == float(deal.amount)
         assert new_data["currency"] == deal.currency
-        assert parse_datetime(new_data["expected_close_date"]) == deal.expected_close_date
+        assert new_data["expected_close_date"] == deal.expected_close_date
         assert new_data["company"] == deal.company.id
 
     def test_manager_cannot_update_not_team_deal(self, manager_client):
@@ -608,7 +608,7 @@ class TestDealsEndpoint:
             "description": "New description",
             "amount": 3600,
             "currency": Currency.EUR,
-            "expected_close_date": "2027-01-01T01:00:00Z",
+            "expected_close_date": timezone.now() + timedelta(days=10),
             "company": CompanyFactory().id,
         }
         res = sales_rep_client.patch(f"/api/deals/{deal.id}/", data=new_data, format="json")
@@ -619,7 +619,7 @@ class TestDealsEndpoint:
         assert new_data["description"] == deal.description
         assert float(new_data["amount"]) == float(deal.amount)
         assert new_data["currency"] == deal.currency
-        assert parse_datetime(new_data["expected_close_date"]) == deal.expected_close_date
+        assert new_data["expected_close_date"] == deal.expected_close_date
         assert new_data["company"] == deal.company.id
 
     def test_sales_rep_cannot_update_other_user_deal(self, sales_rep_client):
@@ -674,6 +674,26 @@ class TestDealsEndpoint:
         res = employee_client.patch(f"/api/deals/{deal.id}/")
         assert res.status_code == 403
 
+    def test_change_deal_assignee_cascades_to_activities(self, admin_client):
+        # перевіряє, що зміна assigned_to в deal поширюється на activities, які належать цьому deal
+        deal = DealFactory()
+        activities = ActivityFactory.create_batch(4, deal=deal)
+        user = UserFactory()
+        new_data = {
+            "assigned_to": user.id,
+        }
+
+        res = admin_client.patch(f"/api/deals/{deal.id}/", data=new_data, format="json")
+
+        assert res.status_code == 200
+
+        deal.refresh_from_db()
+        assert deal.assigned_to == user
+
+        for activity in activities:
+            activity.refresh_from_db()
+            assert activity.assigned_to == user
+
     # delete
     def test_admin_can_delete_deal(self, admin_client):
         deal = DealFactory()
@@ -714,7 +734,7 @@ class TestDealsEndpoint:
         assert res.status_code == 404
         assert Deal.objects.filter(id=deal.id).exists()
 
-    def test_employee_cannot_delete_not_own_deal(self, employee_client):
+    def test_employee_cannot_delete_deal(self, employee_client):
         deal = DealFactory()
 
         res = employee_client.delete(f"/api/deals/{deal.id}/")

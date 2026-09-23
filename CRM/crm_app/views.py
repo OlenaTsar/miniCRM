@@ -442,6 +442,7 @@ class ActivityViewSet(ModelViewSet):
         contact = deal.contact
 
         # дозволяє Manager і Admin вказувати assigned_to при створенні
+        # для SALES_REP заборонено передавати при створенні assigned_to у serializer
         assigned_to_id = self.request.data.get("assigned_to")
         user = self.request.user
 
@@ -523,7 +524,6 @@ class NotificationViewSet(ModelViewSet):
 class ActivityScriptViewSet(ModelViewSet):
     serializer_class = ActivityScriptSerializer
     permission_classes = [IsSalesRep]
-    queryset = ActivityScript.objects.all()
 
     # для attachment
     parser_classes = [MultiPartParser, FormParser]
@@ -543,6 +543,20 @@ class ActivityScriptViewSet(ModelViewSet):
         "stage",
         "product",
     ]
+
+    def get_queryset(self):
+        user = self.request.user
+
+        if user.role == UserRole.SALES_REP:
+            if self.action in ["update", "partial_update", "destroy"]:
+                return ActivityScript.objects.filter(created_by=user)
+            return ActivityScript.objects.all()
+        elif user.role == UserRole.MANAGER:
+            if self.action in ["update", "partial_update", "destroy"]:
+                return ActivityScript.objects.filter(created_by__team=user.team)
+            return ActivityScript.objects.all()
+        else:
+            return ActivityScript.objects.all()
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)

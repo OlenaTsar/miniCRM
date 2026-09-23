@@ -142,7 +142,7 @@ def deal_change(sender, instance, **kwargs):
     if old_deal.assigned_to != instance.assigned_to:
         for activity in instance.activities.all():
             activity.assigned_to = instance.assigned_to
-            activity._changed_by = instance._changed_by
+            activity._changed_by = getattr(instance, "_changed_by", None)
             activity.save()
 
     # якщо було змінено assigned_to тільки угоди, без зміни усієї pipeline
