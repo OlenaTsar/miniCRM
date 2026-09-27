@@ -110,13 +110,10 @@ class DealReportResource(resources.ModelResource):
         widget=ForeignKeyWidget(Product, field="name")
     )
     # повертає всі Contact name для deals
-    contacts = fields.Field(column_name="contacts")
+    contact = fields.Field(column_name="contact")
 
-    def dehydrate_contacts(self, deal):
-        return "\n".join([
-            f"{c.first_name} {c.last_name}"
-            for c in deal.contacts.all()
-        ])
+    def dehydrate_contact(self, deal):
+        return f"{deal.contact.first_name} {deal.contact.last_name}"
 
     class Meta:
         model = Deal
@@ -132,7 +129,7 @@ class DealReportResource(resources.ModelResource):
             'closed_at',
             'pipeline',
             'product',
-            'contacts',
+            'contact',
             'assigned_to',
         ]
 

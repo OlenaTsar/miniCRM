@@ -34,7 +34,7 @@ urlpatterns = [
     path("contacts-export/", ContactExportView.as_view()),
     path("reports/contacts/", ContactReportView.as_view()),
     path("reports/deals/", DealReportView.as_view()),
-    path("reports/activity/", ActivityReportView.as_view()),
+    path("reports/activities/", ActivityReportView.as_view()),
 ]
 
 urlpatterns += router.urls
