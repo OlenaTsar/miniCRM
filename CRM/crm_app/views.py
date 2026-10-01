@@ -720,7 +720,8 @@ class ArchiveViewSet(
             return Archive.objects.filter(
                 Q(deals__assigned_to__team=user.team) |
                 Q(activities__assigned_to__team=user.team) |
-                Q(pipelines__assigned_to__team=user.team)
+                Q(pipelines__assigned_to__team=user.team) |
+                Q(archived_by__team=user.team)
             ).prefetch_related(
                 Prefetch(
                     "deals",
@@ -739,7 +740,8 @@ class ArchiveViewSet(
             return Archive.objects.filter(
                 Q(deals__assigned_to=user) |
                 Q(activities__assigned_to=user) |
-                Q(pipelines__assigned_to=user)
+                Q(pipelines__assigned_to=user) |
+                Q(archived_by=user)
             ).prefetch_related(
                 Prefetch(
                     "deals",
@@ -851,6 +853,32 @@ class ArchiveViewSet(
 
         for user in users:
             send_data_archiving_notification.delay(str(user.id), str(archive.id))
+
+    def destroy(self, request, *args, **kwargs):
+        archive_id = self.get_object().id
+        archive = Archive.objects.get(id=archive_id)
+
+        if self.request.user.role == UserRole.MANAGER:
+            # забороняє manager видаляти архів, якщо в ньому є дані користувачів з іншої команди
+
+            # тут порівнюємо об'єкти з get_queryset (self.get_object()) і з бд (archive)
+            # get_queryset відфільтровує pipelines/deals/activities, відображаючи лише ті,
+            # що належать користувачам з команди менеджера
+            # таким чином, якщо ці набори pipelines/deals/activities не будуть однаковими -
+            # виходить, що архів містить дані, які належать користувачам з іншої команди
+            if (list(self.get_object().pipelines.all()) != list(archive.pipelines.all())
+                    or list(self.get_object().deals.all()) != list(archive.deals.all())
+                    or list(self.get_object().activities.all()) != list(archive.activities.all())):
+                raise PermissionDenied("You cannot delete an archive containing data of users from other teams.")
+
+        if self.request.user.role == UserRole.SALES_REP:
+            # забороняє sales_rep видаляти архів, якщо в ньому є дані інших користувачів
+            if (list(archive.pipelines.all()) != list(self.request.user.pipelines.all())
+                    or list(archive.deals.all()) != list(self.request.user.deals.all())
+                    or list(archive.activities.all()) != list(self.request.user.activities.all())):
+                raise PermissionDenied("You cannot delete an archive containing data of another user.")
+
+        return super().destroy(request, *args, **kwargs)
 
     @action(detail=False, methods=["post"], url_path="unarchive")
     def unarchive(self, request, pk=None):
