@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     "django_celery_results",
     "django_celery_beat",
     "django_filters",
+    "drf_spectacular",  # документація
 ]
 
 MIDDLEWARE = [
@@ -149,6 +150,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
 SIMPLE_JWT = {

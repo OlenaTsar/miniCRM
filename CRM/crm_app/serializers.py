@@ -22,6 +22,11 @@ from auth_app.models import UserRole
 
 
 class CompanySerializer(serializers.ModelSerializer):
+    """
+        Серіалізатор для компаній.
+
+        **Read-only поля:** `id`, `created_at`, `contacts`, `created_by`, `deals`
+        """
     class Meta:
         model = Company
         fields = [
@@ -48,6 +53,11 @@ class CompanySerializer(serializers.ModelSerializer):
 
 
 class ContactSerializer(serializers.ModelSerializer):
+    """
+        Серіалізатор для контактів.
+
+        **Read-only поля:** `id`, `created_at`, `created_by`, `activities`, `deals`
+        """
     class Meta:
         model = Contact
         fields = [
@@ -77,6 +87,12 @@ class ContactSerializer(serializers.ModelSerializer):
 
 
 class ProductSerializer(serializers.ModelSerializer):
+    """
+        Серіалізатор для продуктів.
+
+        **Примітка:** Sales Rep не бачить поле `teams`.
+        **Read-only поля:** `id`, `teams`
+        """
     class Meta:
         model = Product
         fields = [
@@ -100,6 +116,16 @@ class ProductSerializer(serializers.ModelSerializer):
 
 
 class PipelineSerializer(serializers.ModelSerializer):
+    """
+        Серіалізатор для pipeline.
+
+        **Валідація:**
+        - `product` — обов'язкове при створенні, не може бути змінене після створення
+        - Sales Rep не може встановлювати або змінювати `assigned_to` → 403
+        - Manager може призначати pipeline тільки членам своєї команди → 403
+
+        **Read-only поля:** `id`, `created_at`, `deals`
+        """
     class Meta:
         model = Pipeline
         fields = [
@@ -145,6 +171,26 @@ class PipelineSerializer(serializers.ModelSerializer):
 
 
 class DealSerializer(serializers.ModelSerializer):
+    """
+        Серіалізатор для угод.
+
+        **Валідація при створенні:**
+        - Sales Rep може створювати угоди тільки для своїх pipeline → 400
+        - Manager може створювати угоди тільки для pipeline своєї команди → 400
+
+        **Валідація при оновленні:**
+        - `contact` — не може бути змінений після створення
+        - `assigned_to` і `pipeline` не можна змінювати одночасно якщо вони не збігаються → 400
+        - Sales Rep не може змінювати `assigned_to` → 400
+        - Manager може призначати угоди тільки членам своєї команди → 403
+        - Новий `assigned_to` повинен мати активну pipeline для того самого продукту → 400
+        - Sales Rep може переносити угоду тільки у свою pipeline → 403
+        - Manager може переносити угоду тільки у pipeline своєї команди → 403
+        - Нова pipeline повинна відповідати за той самий продукт → 400
+        - Нова pipeline не може бути архівованою → 400
+
+        **Read-only поля:** `id`, `created_at`, `product`, `stage`, `status`, `closed_at`, `activities`
+        """
     class Meta:
         model = Deal
         fields = [
@@ -261,10 +307,18 @@ class DealSerializer(serializers.ModelSerializer):
 
 
 class ChangeStageSerializer(serializers.Serializer):
+    """
+        Серіалізатор для зміни stage угоди.
+        Приймає тільки валідні значення `PipelineStage`.
+        """
     stage = serializers.ChoiceField(choices=PipelineStage.choices)
 
 
 class DealStageHistorySerializer(serializers.ModelSerializer):
+    """
+        Серіалізатор для історії змін stage угоди.
+        Всі поля read-only. `changed_by` повертає email користувача.
+        """
     changed_by = serializers.StringRelatedField()  # для відображення __str__ юзера (email)
 
     class Meta:
@@ -280,6 +334,20 @@ class DealStageHistorySerializer(serializers.ModelSerializer):
 
 
 class ActivitySerializer(serializers.ModelSerializer):
+    """
+        Серіалізатор для активностей.
+
+        **Валідація при створенні:**
+        - Sales Rep не може передавати `assigned_to` → 400
+        - `deal` повинен належати `assigned_to` або поточному користувачеві → 400
+        - `due_date` повинен бути більше ніж 5 хвилин від поточного часу → 400
+
+        **Валідація при оновленні:**
+        - `deal`, `assigned_to`, `activity_type` — не можуть бути змінені після створення
+        - Для завершеної активності (`completed_at` не None) можна змінювати тільки `outcome` → 400
+
+        **Read-only поля:** `id`, `contact`, `created_at`, `completed_at`, `notification`
+        """
     class Meta:
         model = Activity
         fields = [
@@ -362,6 +430,10 @@ class ActivitySerializer(serializers.ModelSerializer):
 
 
 class ActivityLogSerializer(serializers.ModelSerializer):
+    """
+        Серіалізатор для логів активностей.
+        Всі поля read-only. `performed_by` повертає email користувача.
+        """
     performed_by = serializers.StringRelatedField()  # для відображення __str__ юзера (email)
 
     class Meta:
@@ -378,6 +450,10 @@ class ActivityLogSerializer(serializers.ModelSerializer):
 
 
 class NotificationSerializer(serializers.ModelSerializer):
+    """
+        Серіалізатор для сповіщень.
+        Всі поля read-only — сповіщення створюються і керуються системою автоматично.
+        """
     class Meta:
         model = Notification
         fields = [
@@ -392,6 +468,11 @@ class NotificationSerializer(serializers.ModelSerializer):
 
 
 class ActivityScriptSerializer(serializers.ModelSerializer):
+    """
+        Серіалізатор для скриптів активностей.
+
+        **Read-only поля:** `id`, `created_by`, `activities`
+        """
     class Meta:
         model = ActivityScript
         fields = [
@@ -413,6 +494,10 @@ class ActivityScriptSerializer(serializers.ModelSerializer):
 
 
 class ArchiveSerializer(serializers.ModelSerializer):
+    """
+        Серіалізатор для архівів.
+        Всі поля read-only — архів керується через ArchiveViewSet.
+        """
     class Meta:
         model = Archive
         fields = [

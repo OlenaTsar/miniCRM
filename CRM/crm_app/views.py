@@ -50,6 +50,20 @@ from .tasks import send_data_archiving_notification
 
 
 class CompanyViewSet(ModelViewSet):
+    """
+        Управління компаніями.
+
+        **Фільтрація:**
+        - `industry` — фільтр за галуззю
+        - `assigned_to` — фільтр за відповідальним
+
+        **Пошук:** `?search=<name>`, `?search=<industry>`, `?search=<email>`, `?search=<website>`
+
+        **Сортування:** `?ordering=name`, `?ordering=industry`, `?ordering=-created_at`
+
+        **Створення:**
+        - `created_by` встановлюється автоматично як поточний користувач
+        """
     serializer_class = CompanySerializer
     permission_classes = [IsSalesRep]
     queryset = Company.objects.all()
@@ -69,10 +83,21 @@ class CompanyViewSet(ModelViewSet):
     ]
 
     def perform_create(self, serializer):
+        """
+                При створенні компанії `created_by` встановлюється автоматично
+                як поточний користувач.
+                """
         serializer.save(created_by=self.request.user)
 
     @action(detail=True, methods=["post"], url_path="add-contact")
     def add_contact(self, request, pk=None):
+        """
+                Додає контакт до компанії.
+
+                **Обмеження:**
+                - Контакт вже доданий до цієї компанії → 400
+                - Контакт вже доданий до іншої компанії → 400
+                """
         company = self.get_object()
         contact_id = request.data.get("contact")
         contact_obj = get_object_or_404(Contact, id=contact_id)
@@ -89,6 +114,12 @@ class CompanyViewSet(ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="remove-contact")
     def remove_contact(self, request, pk=None):
+        """
+                Видаляє контакт з компанії.
+
+                **Обмеження:**
+                - Контакт не належить до цієї компанії → 400
+                """
         company = self.get_object()
         contact_id = request.data.get("contact")
         contact_obj = get_object_or_404(Contact, id=contact_id)
@@ -102,6 +133,23 @@ class CompanyViewSet(ModelViewSet):
 
 
 class ContactViewSet(ModelViewSet):
+    """
+        Управління контактами.
+
+        **Фільтрація:**
+        - `status` — фільтр за статусом контакту
+        - `lead_source` — фільтр за джерелом ліда
+        - `assigned_to` — фільтр за відповідальним
+        - `company` — фільтр за компанією
+
+        **Пошук:** `?search=<first_name>`, `?search=<last_name>`, `?search=<email>`,
+        `?search=<phone>`, `?search=<city>`, `?search=<status>`
+
+        **Сортування:** `?ordering=first_name`, `?ordering=last_name`, `?ordering=-created_at`
+
+        **Створення:**
+        - `created_by` встановлюється автоматично як поточний користувач
+        """
     serializer_class = ContactSerializer
     permission_classes = [IsSalesRep]
     queryset = Contact.objects.all()
@@ -124,10 +172,46 @@ class ContactViewSet(ModelViewSet):
     ]
 
     def perform_create(self, serializer):
+        """
+                При створенні контакту `created_by` встановлюється автоматично
+                як поточний користувач.
+                """
         serializer.save(created_by=self.request.user)
 
 
 class ContactImportView(APIView):
+    """
+        Імпорт контактів з CSV файлу.
+
+        **Формат запиту:** `multipart/form-data`
+
+        **Параметри:**
+        - `file` — CSV файл з контактами (обов'язковий)
+
+        **Формат CSV:**
+            first_name,last_name,email,phone,city,status,lead_source
+            Іванна,Коваль,ivanna@test.com,+380501234567,Lviv,lead,instagram
+
+    **Поведінка:**
+    - Спочатку виконується перевірка файлу без збереження (`dry_run`)
+    - Якщо є помилки — повертає 400 з описом помилок
+    - Якщо файл валідний — імпортує дані в БД
+    - Якщо контакт з таким email вже існує — оновлює його
+    - `created_by` встановлюється автоматично як поточний користувач
+
+    **Відповідь:**
+```json
+    {
+        "created": 5,
+        "updated": 2,
+        "skipped": 1
+    }
+```
+
+    **Помилки:**
+    - файл не передано → 400
+    - файл містить невалідні дані → 400
+    """
     permission_classes = [IsSalesRep]
     parser_classes = [MultiPartParser]
 
@@ -156,6 +240,24 @@ class ContactImportView(APIView):
 
 
 class ContactExportView(APIView):
+    """
+        Експорт контактів у CSV або Excel файл.
+
+        **Параметри запиту:**
+        - `file_format` — формат файлу: `csv` (за замовчуванням) або `excel`
+        - `created_by` — фільтр за автором контакту (UUID користувача)
+        - `status` — фільтр за статусом контакту
+
+        **Приклади:**
+        GET /api/contacts-export/                              → всі контакти у CSV
+        GET /api/contacts-export/?file_format=excel            → всі контакти у Excel
+        GET /api/contacts-export/?status=lead&file_format=csv  → leads у CSV
+
+    **Відповідь:** файл для завантаження
+    - CSV — `text/csv`
+    - Excel — `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
+    """
+
     permission_classes = [IsSalesRep]
 
     def get(self, request):
@@ -192,6 +294,16 @@ class ContactExportView(APIView):
 
 
 class ProductViewSet(ModelViewSet):
+    """
+        Управління продуктами.
+
+        **Доступ:**
+        - Sales Rep і вище — перегляд списку та деталей продукту
+        - Manager і вище — створення, оновлення, видалення
+
+        **Примітка:**
+        - Sales Rep не бачить поле `teams` при перегляді продукту
+        """
     serializer_class = ProductSerializer
     queryset = Product.objects.all()
 
@@ -205,10 +317,29 @@ class ProductViewSet(ModelViewSet):
 
 
 class PipelineViewSet(ModelViewSet):
+    """
+        Управління pipeline.
+
+        **Доступ:**
+        - Admin — всі pipeline
+        - Manager — pipeline своєї команди
+        - Sales Rep — тільки свої pipeline
+
+        **Фільтрація:**
+        - `display_archived=true` — включити архівовані pipeline (за замовчуванням не показуються)
+
+        **Створення:**
+        - якщо `assigned_to` не передано — встановлюється автоматично як поточний користувач
+        - `product` — обов'язкове при створенні, не може бути змінене після створення
+        """
     serializer_class = PipelineSerializer
     permission_classes = [IsSalesRep]
 
     def get_queryset(self):
+        """
+                Повертає queryset залежно від ролі користувача.
+                Архівовані pipeline не включаються якщо не передано `display_archived=true`.
+        """
 
         user = self.request.user
         display_archived = self.request.query_params.get("display_archived", "false")
@@ -232,6 +363,10 @@ class PipelineViewSet(ModelViewSet):
         return Pipeline.objects.none()
 
     def perform_create(self, serializer):
+        """
+                При створенні pipeline якщо `assigned_to` не передано —
+                встановлюється автоматично як поточний користувач.
+        """
         assigned_to = serializer.validated_data.get("assigned_to")
 
         if assigned_to:
@@ -240,13 +375,40 @@ class PipelineViewSet(ModelViewSet):
             serializer.save(assigned_to=self.request.user)
 
     def perform_update(self, serializer):
-        # для передавання _changed_by у signal (ActivityLog)
-        # потрібно при зміні assigned_to
+        """
+        Передає `_changed_by` в signal для логування змін в ActivityLog.
+        Потрібно при зміні assigned_to
+        """
         serializer.instance._changed_by = self.request.user
         serializer.save()
 
 
 class DealViewSet(ModelViewSet):
+    """
+    Управління угодами.
+
+    **Доступ:**
+    - Admin — всі угоди
+    - Manager — угоди своєї команди
+    - Sales Rep — тільки свої угоди
+
+    **Фільтрація:**
+    - `status` — фільтр за статусом
+    - `stage` — фільтр за етапом
+    - `amount`, `amount_min`, `amount_max` — фільтр за сумою
+    - `assigned_to` — фільтр за відповідальним
+    - `pipeline` — фільтр за pipeline
+    - `expected_close_date` — фільтр за датою закриття
+    - `display_archived=true` — включити архівовані угоди (за замовчуванням не показуються)
+
+    **Пошук:** `?search=<name>`
+
+    **Сортування:** `?ordering=name`, `?ordering=-amount`, `?ordering=expected_close_date`, `?ordering=created_at`
+
+    **Створення:**
+    - `product` встановлюється автоматично з pipeline
+    - `assigned_to` встановлюється автоматично з pipeline
+    """
     serializer_class = DealSerializer
     permission_classes = [IsSalesRep]
 
@@ -264,6 +426,10 @@ class DealViewSet(ModelViewSet):
     ]
 
     def get_queryset(self):
+        """
+        Повертає queryset залежно від ролі користувача.
+        Архівовані угоди не включаються якщо не передано `display_archived=true`.
+        """
 
         user = self.request.user
         display_archived = self.request.query_params.get("display_archived", "false")
@@ -287,6 +453,10 @@ class DealViewSet(ModelViewSet):
         return Deal.objects.none()
 
     def perform_create(self, serializer):
+        """
+        При створенні угоди `product` і `assigned_to` встановлюються автоматично
+        з pipeline до якої належить угода.
+        """
         pipeline = serializer.validated_data.get('pipeline')
 
         # щоб product угоди був той, що і в pipeline, до якої вона належить
@@ -298,13 +468,30 @@ class DealViewSet(ModelViewSet):
         serializer.save(assigned_to=assigned_to, product=product)
 
     def perform_update(self, serializer):
-        # для передавання _changed_by у signal (ActivityLog)
-        # потрібно при зміні assigned_to
+        """
+        Передає `_changed_by` в signal для логування змін в ActivityLog.
+        Потрібно при зміні assigned_to
+        """
         serializer.instance._changed_by = self.request.user
         serializer.save()
 
     @action(detail=True, methods=["post"], url_path="change-stage")
     def change_stage(self, request, pk=None):
+        """
+            Змінює stage угоди.
+
+            **Обмеження:**
+            - Неможливо змінити stage завершеної угоди (`closed_at` не None)
+            - Неможливо змінити stage угоди на паузі (`status=ON_HOLD`)
+            - Якщо переданий stage збігається з поточним — зміни не вносяться
+
+            **Автоматичні зміни:**
+            - `status` встановлюється автоматично залежно від нового stage:
+                - `NEW_LEAD` → `NEW`
+                - `CLOSED_WON` / `CLOSED_LOST` → `CLOSED`
+                - решта → `IN_PROGRESS`
+            - `closed_at` встановлюється автоматично при `CLOSED_WON` або `CLOSED_LOST`
+            """
         deal = self.get_object()
 
         if deal.closed_at:
@@ -345,6 +532,19 @@ class DealViewSet(ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="hold")
     def hold(self, request, pk=None):
+        """
+            Ставить угоду на паузу або знімає з паузи.
+
+            **Обмеження:**
+            - Неможливо змінити статус завершеної угоди (`closed_at` не None)
+
+            **Поведінка:**
+            - Якщо угода активна → ставить на паузу (`status=ON_HOLD`):
+                - скасовує всі ненадіслані сповіщення по активностях угоди
+            - Якщо угода на паузі → знімає з паузи:
+                - `status` встановлюється відповідно до поточного stage
+                - відновлює сповіщення для незавершених і непрострочених активностей
+            """
         deal = self.get_object()
 
         if deal.closed_at:
@@ -387,6 +587,9 @@ class DealViewSet(ModelViewSet):
 
     @action(detail=True, methods=["get"], url_path="stage-history")
     def stage_history(self, request, pk=None):
+        """
+            Повертає історію змін stage угоди у зворотному хронологічному порядку.
+            """
         deal = self.get_object()
         history = deal.stage_history.all().order_by("-changed_at")
         serializer = DealStageHistorySerializer(history, many=True)
@@ -394,6 +597,30 @@ class DealViewSet(ModelViewSet):
 
 
 class ActivityViewSet(ModelViewSet):
+    """
+        Управління активностями (дзвінки, зустрічі, завдання тощо).
+
+        **Доступ:**
+        - Admin — всі активності
+        - Manager — активності своєї команди
+        - Sales Rep — тільки свої активності
+
+        **Фільтрація:**
+        - `activity_type` — фільтр за типом активності
+        - `completed_at` — фільтр за датою завершення
+        - `due_date` — фільтр за датою дедлайну
+        - `assigned_to` — фільтр за відповідальним
+        - `display_archived=true` — включити архівовані активності (за замовчуванням не показуються)
+
+        **Пошук:** `?search=<title>` або `?search=<activity_type>`
+
+        **Сортування:** `?ordering=title`, `?ordering=-due_date`, `?ordering=created_at`, `?ordering=completed_at`
+
+        **Створення:**
+        - `contact` встановлюється автоматично з deal
+        - `assigned_to` — Admin і Manager можуть вказати явно, Sales Rep не може
+        - Manager може призначити активність тільки для членів своєї команди
+        """
     serializer_class = ActivitySerializer
     permission_classes = [IsSalesRep]
 
@@ -412,6 +639,10 @@ class ActivityViewSet(ModelViewSet):
     ]
 
     def get_queryset(self):
+        """
+                Повертає queryset залежно від ролі користувача.
+                Архівовані активності не включаються якщо не передано `display_archived=true`.
+                """
 
         user = self.request.user
         display_archived = self.request.query_params.get("display_archived", "false")
@@ -435,6 +666,13 @@ class ActivityViewSet(ModelViewSet):
         return Activity.objects.none()
 
     def perform_create(self, serializer):
+        """
+                При створенні активності:
+                - `contact` встановлюється автоматично з deal
+                - якщо `assigned_to` не передано — встановлюється поточний користувач
+                - Manager може призначити активність тільки для членів своєї команди,
+                  інакше повертається 403
+                """
         # автоматичне заповнення поля contact, відповідно до deal
         deal_id = self.request.data.get("deal")
         # не перевіряю чи deal_id існує, бо помилка повернеться швидше
@@ -461,12 +699,21 @@ class ActivityViewSet(ModelViewSet):
             serializer.save(assigned_to=user, contact=contact)
 
     def perform_update(self, serializer):
+        """
+                Передає `_changed_by` в signal для логування змін в ActivityLog.
+                """
         # для передавання _changed_by у signal (ActivityLog)
         serializer.instance._changed_by = self.request.user
         serializer.save()
 
     @action(detail=True, methods=["post"], url_path="mark-as-completed")
     def mark_as_completed(self, request, pk=None):
+        """
+                Позначає активність як завершену.
+
+                Встановлює `completed_at` на поточний час.
+                Якщо активність вже завершена — повертає 204 без змін.
+                """
         activity = self.get_object()
 
         if activity.completed_at is None:
@@ -478,6 +725,9 @@ class ActivityViewSet(ModelViewSet):
 
     @action(detail=True, methods=["get"], url_path="activity-log")
     def activity_log(self, request, pk=None):
+        """
+                Повертає історію змін активності у зворотному хронологічному порядку.
+                """
         activity = self.get_object()
         activity_log = activity.activity_log.all().order_by("-timestamp")
         serializer = ActivityLogSerializer(activity_log, many=True)
@@ -485,6 +735,17 @@ class ActivityViewSet(ModelViewSet):
 
 
 class NotificationViewSet(ModelViewSet):
+    """
+        Управління сповіщеннями користувача.
+
+        **Доступ:** тільки власні сповіщення поточного користувача.
+
+        **Обмеження:**
+        - POST, PUT, PATCH — недоступні (сповіщення створюються автоматично системою)
+        - Повертаються тільки надіслані сповіщення (`sent_at` не None)
+
+        **Сортування:** `?ordering=notify_at`, `?ordering=-sent_at`, `?ordering=read_at`
+        """
     serializer_class = NotificationSerializer
     permission_classes = [IsSalesRep]
 
@@ -497,6 +758,10 @@ class NotificationViewSet(ModelViewSet):
     ]
 
     def get_queryset(self):
+        """
+                Повертає тільки надіслані сповіщення поточного користувача.
+                Ненадіслані сповіщення не показуються.
+                """
         user = self.request.user
 
         return Notification.objects.filter(recipient=user, sent_at__isnull=False)
@@ -512,6 +777,12 @@ class NotificationViewSet(ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="mark-as-read")
     def mark_as_read(self, request, pk=None):
+        """
+                Позначає сповіщення як прочитане.
+
+                Встановлює `read_at` на поточний час.
+                Якщо сповіщення вже прочитане — повертає 204 без змін.
+                """
         notification = self.get_object()
 
         if notification.read_at is None:
@@ -522,6 +793,30 @@ class NotificationViewSet(ModelViewSet):
 
 
 class ActivityScriptViewSet(ModelViewSet):
+    """
+        Управління скриптами активностей.
+
+        **Доступ:**
+        - Перегляд (list, retrieve) — всі ролі
+        - Створення — всі ролі
+        - Оновлення та видалення:
+            - Sales Rep — тільки свої скрипти
+            - Manager — скрипти членів своєї команди
+            - Admin — всі скрипти
+
+        **Фільтрація:**
+        - `activity_type` — фільтр за типом активності
+        - `stage` — фільтр за етапом pipeline
+        - `product` — фільтр за продуктом
+
+        **Пошук:** `?search=<title>`, `?search=<activity_type>`, `?search=<stage>`, `?search=<product>`
+
+        **Сортування:** `?ordering=title`, `?ordering=activity_type`, `?ordering=stage`, `?ordering=product`
+
+        **Створення:**
+        - `created_by` встановлюється автоматично як поточний користувач
+        - `attachment` — необов'язковий PDF файл
+        """
     serializer_class = ActivityScriptSerializer
     permission_classes = [IsSalesRep]
 
@@ -563,6 +858,18 @@ class ActivityScriptViewSet(ModelViewSet):
 
 
 class ContactReportView(APIView):
+    """
+        Звіт по контактах у CSV або Excel файлі.
+
+        **Параметри запиту:**
+        - `file_format` — формат файлу: `csv` (за замовчуванням) або `excel`
+        - `created_by` — фільтр за автором контакту (UUID користувача)
+        - `status` — фільтр за статусом контакту
+
+        **Відповідь:** файл для завантаження з датою і часом експорту в назві
+        - CSV — `contacts_report_DD.MM.YYYY_HH-MM.csv`
+        - Excel — `contacts_report_DD.MM.YYYY_HH-MM.xlsx`
+        """
     permission_classes = [IsSalesRep]
 
     def get(self, request):
@@ -599,6 +906,23 @@ class ContactReportView(APIView):
 
 
 class DealReportView(APIView):
+    """
+        Звіт по угодах у CSV або Excel файлі.
+
+        **Доступ:**
+        - Admin — всі угоди
+        - Manager — угоди своєї команди
+        - Sales Rep — тільки свої угоди
+
+        **Параметри запиту:**
+        - `file_format` — формат файлу: `csv` (за замовчуванням) або `excel`
+        - `assigned_to` — фільтр за відповідальним (UUID користувача)
+        - `status` — фільтр за статусом угоди
+
+        **Відповідь:** файл для завантаження з датою і часом експорту в назві
+        - CSV — `deals_report_DD.MM.YYYY_HH-MM.csv`
+        - Excel — `deals_report_DD.MM.YYYY_HH-MM.xlsx`
+        """
     permission_classes = [IsSalesRep]
 
     def get(self, request):
@@ -643,6 +967,23 @@ class DealReportView(APIView):
 
 
 class ActivityReportView(APIView):
+    """
+        Звіт по активностях у CSV або Excel файлі.
+
+        **Доступ:**
+        - Admin — всі активності
+        - Manager — активності своєї команди
+        - Sales Rep — тільки свої активності
+
+        **Параметри запиту:**
+        - `file_format` — формат файлу: `csv` (за замовчуванням) або `excel`
+        - `assigned_to` — фільтр за відповідальним (UUID користувача)
+        - `status` — фільтр за статусом активності
+
+        **Відповідь:** файл для завантаження з датою і часом експорту в назві
+        - CSV — `activities_report_DD.MM.YYYY_HH-MM.csv`
+        - Excel — `activities_report_DD.MM.YYYY_HH-MM.xlsx`
+        """
     permission_classes = [IsSalesRep]
 
     def get(self, request):
@@ -693,6 +1034,49 @@ class ArchiveViewSet(
     mixins.CreateModelMixin,    # POST /api/archive/
     viewsets.GenericViewSet,
 ):
+    """
+        Управління архівами.
+
+        **Доступні методи:** GET (list, retrieve), POST (create), DELETE
+
+        **Доступ:**
+        - Admin — всі архіви
+        - Manager — архіви що містять дані своєї команди
+        - Sales Rep — архіви що містять свої дані
+
+        **Примітка:** Manager і Sales Rep бачать тільки свої дані всередині архіву
+        (відфільтровані pipelines, deals, activities)
+
+        **Фільтрація:**
+        - `archiving_type` — фільтр за типом архівації
+        - `timestamp` — фільтр за датою архівації
+        - `archived_by` — фільтр за автором архівації
+
+        **Сортування:** `?ordering=archiving_type`, `?ordering=-timestamp`, `?ordering=archived_by`
+
+        **Створення:**
+        - `archived_by` встановлюється автоматично як поточний користувач
+            (якщо архівація автоматична, то `archived_by` встановлюється як None)
+        - Передаються списки id для архівації: `pipelines`, `deals`, `activities`
+        - Вже заархівовані об'єкти ігноруються
+        - При архівації pipeline автоматично архівуються всі його deals і activities
+        - Notification для архівованих activities видаляються
+        - При архівації deal автоматично архівуються всі його activities
+        - Після архівації надсилаються сповіщення всім причетним користувачам
+
+        **Видалення:**
+        - Manager не може видалити архів, що містить дані користувачів з іншої команди → 403
+        - Sales Rep не може видалити архів що містить дані інших користувачів → 403
+
+        **Розархівація** (`POST /api/archive/unarchive/`):
+        - Передаються списки id для розархівації: `pipelines`, `deals`, `activities`
+        - Вже розархівовані об'єкти ігноруються
+        - При розархівації pipeline автоматично розархівовуються пов'язані deals і activities
+        - При розархівації deal автоматично розархівовуються пов'язані activities
+        - Notification для розархівованих activities відновлюються
+        - Користувач може розархівувати тільки свої дані
+        """
+
     serializer_class = ArchiveSerializer
     permission_classes = [IsSalesRep]
 
@@ -711,6 +1095,10 @@ class ArchiveViewSet(
     ]
 
     def get_queryset(self):
+        """
+                Повертає queryset залежно від ролі користувача.
+                Manager і Sales Rep бачать тільки відфільтровані дані всередині архіву.
+                """
 
         user = self.request.user
 
@@ -760,6 +1148,10 @@ class ArchiveViewSet(
             return Archive.objects.none()
 
     def perform_create(self, serializer):
+        """
+                Створює архів і прив'язує до нього передані pipelines, deals, activities.
+                Надсилає сповіщення всім причетним користувачам через Celery.
+                """
         archive = serializer.save(archived_by=self.request.user)
 
         # встановлюємо зв'язок з архівом через Pipeline, Deal, Activity
@@ -855,6 +1247,13 @@ class ArchiveViewSet(
             send_data_archiving_notification.delay(str(user.id), str(archive.id))
 
     def destroy(self, request, *args, **kwargs):
+        """
+                Видаляє архів.
+
+                **Обмеження:**
+                - Manager не може видалити архів що містить дані користувачів з іншої команди → 403
+                - Sales Rep не може видалити архів що містить дані інших користувачів → 403
+                """
         archive_id = self.get_object().id
         archive = Archive.objects.get(id=archive_id)
 
@@ -882,6 +1281,14 @@ class ArchiveViewSet(
 
     @action(detail=False, methods=["post"], url_path="unarchive")
     def unarchive(self, request, pk=None):
+        """
+                Розархівовує передані pipelines, deals, activities.
+
+                Передаються списки id: `pipelines`, `deals`, `activities`.
+                Користувач може розархівувати тільки свої дані відповідно до ролі.
+                При розархівації pipeline автоматично розархівовуються пов'язані deals і activities
+                що знаходяться в тому самому архіві.
+                """
         # розархівовує дані, які були передані
 
         pipelines_id = self.request.data.get("pipelines", [])
