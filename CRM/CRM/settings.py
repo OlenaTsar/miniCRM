@@ -150,7 +150,17 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    # документація
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # обмеження кількості запитів
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",  # для неавторизованих
+        "rest_framework.throttling.UserRateThrottle",  # для авторизованих
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "100/day",    # 100 запитів на день для неавторизованих
+        "user": "1000/day",   # 1000 запитів на день для авторизованих
+    },
 }
 
 SIMPLE_JWT = {
