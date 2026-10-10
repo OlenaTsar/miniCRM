@@ -677,8 +677,10 @@ class TestDealsEndpoint:
     def test_change_deal_assignee_cascades_to_activities(self, admin_client):
         # перевіряє, що зміна assigned_to в deal поширюється на activities, які належать цьому deal
         deal = DealFactory()
-        activities = ActivityFactory.create_batch(4, deal=deal)
+        activities = ActivityFactory.create_batch(4, deal=deal, assigned_to=deal.assigned_to)
+
         user = UserFactory()
+        PipelineFactory(assigned_to=user, product=deal.product)
         new_data = {
             "assigned_to": user.id,
         }

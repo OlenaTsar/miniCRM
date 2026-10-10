@@ -108,7 +108,7 @@ class ActivityByPipelineAnalyticsService(AnalyticsService):
             pipeline_activities = self.activities.filter(deal__pipeline=pipeline)
             result.append({
                 "pipeline_name": pipeline.name,
-                "product": pipeline.product.name,
+                "product": pipeline.product.name if pipeline.product else None,
                 "assigned_to": pipeline.assigned_to.email,
                 "analytics": ActivityAnalyticsService(request=self.request, activities=pipeline_activities).get_data(),
             })

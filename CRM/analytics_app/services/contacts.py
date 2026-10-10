@@ -95,10 +95,10 @@ class ContactByPipelineAnalyticsService(AnalyticsService):
         result = []
 
         for pipeline in self.pipelines:
-            pipeline_contacts = self.contacts.filter(deals__pipeline=pipeline)
+            pipeline_contacts = Contact.objects.filter(deals__pipeline=pipeline)
             result.append({
                 "pipeline_name": pipeline.name,
-                "product": pipeline.product.name,
+                "product": pipeline.product.name if pipeline.product else None,
                 "assigned_to": pipeline.assigned_to.email,
                 "analytics": ContactAnalyticsService(request=self.request, contacts=pipeline_contacts).get_data(),
             })

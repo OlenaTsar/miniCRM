@@ -113,8 +113,8 @@ class ActivityFactory(DjangoModelFactory):
     outcome = None
     due_date = factory.LazyFunction(lambda: timezone.now() + timedelta(hours=2))
 
-    assigned_to = factory.SubFactory(UserFactory)
-    contact = factory.SubFactory(ContactFactory)
+    assigned_to = factory.LazyAttribute(lambda obj: obj.deal.assigned_to)
+    contact = factory.LazyAttribute(lambda obj: obj.deal.contact)
     deal = factory.SubFactory(DealFactory)
     script = factory.SubFactory(ActivityScriptFactory)
 

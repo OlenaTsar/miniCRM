@@ -82,8 +82,6 @@ class DealAnalyticsService(AnalyticsService):
 
         result = []
 
-        previous_count = None
-
         stage_order = [
             PipelineStage.NEW_LEAD,
             PipelineStage.QUALIFICATION,
@@ -93,22 +91,25 @@ class DealAnalyticsService(AnalyticsService):
             PipelineStage.CLOSED_LOST,
         ]
 
-        for stage in stage_order:
+        for i in range(len(stage_order)):
+            stage = stage_order[i]
+
             item = stats.get(stage, {})
 
             count = item.get("count", 0)
 
             if stage in (
-                    PipelineStage.NEW_LEAD,
+                    PipelineStage.CLOSED_WON,
                     PipelineStage.CLOSED_LOST,
             ):
                 conversion = None
 
-            elif previous_count:
-                conversion = round(count / previous_count * 100, 2)
+            elif count:
+                next_stage_count = stats.get(stage_order[i+1], {}).get("count", 0)
+                conversion = round(next_stage_count / count * 100, 2)
 
             else:
-                conversion = None
+                conversion = 100
 
             result.append({
                 "stage": stage,
@@ -117,9 +118,6 @@ class DealAnalyticsService(AnalyticsService):
                 "total_amount": item.get("total_amount") or 0,
                 "conversion": conversion,
             })
-
-            if stage != PipelineStage.CLOSED_LOST:
-                previous_count = count
 
         return result
 
@@ -190,7 +188,7 @@ class DealByPipelineAnalyticsService(AnalyticsService):
             pipeline_deals = self.deals.filter(pipeline=pipeline)
             result.append({
                 "pipeline_name": pipeline.name,
-                "product": pipeline.product.name,
+                "product": pipeline.product.name if pipeline.product else None,
                 "assigned_to": pipeline.assigned_to.email,
                 "analytics": DealAnalyticsService(request=self.request, deals=pipeline_deals).get_data(),
             })
