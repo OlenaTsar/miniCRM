@@ -98,7 +98,7 @@ Analytics scope depends on role: Admin sees company-wide data and per-team/per-u
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/your-username/miniCRM.git
+git clone https://github.com/OlenaTsar/miniCRM.git
 cd miniCRM/CRM
 ```
 
